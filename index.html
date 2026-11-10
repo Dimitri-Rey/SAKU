@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saku — un archiveur qui compresse puis chiffre</title>
+<meta name="description" content="Saku : archiveur libre, compression puis chiffrement authentifié, format documenté, lecteur durci. Mesures vérifiées, sans promesse.">
+<meta property="og:title" content="Saku — un archiveur qui compresse puis chiffre">
+<meta property="og:description" content="Archiveur libre : compression puis chiffrement authentifié, format documenté, lecteur durci.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1.5' y='4.5' width='13' height='8' fill='none' stroke='%231a1a1a'/%3E%3Crect x='3' y='6' width='4' height='5' fill='%231a1a1a'/%3E%3C/svg%3E">
+<style>
+  :root { --encre: #1a1a1a; --gris: #6b6b6b; --pale: #f4f2ee; --trait: #dcdcdc; --fond: #fff; --accent: #8a3b12; }
+  * { box-sizing: border-box; }
+  html { font-size: 18px; scroll-behavior: smooth; }
+  body { margin: 0; background: var(--fond); color: var(--encre); font-family: Georgia, "Times New Roman", serif; line-height: 1.6; }
+  .col { max-width: 44rem; margin: 0 auto; padding: 0 1.25rem; }
+  .large { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem; }
+  a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { color: var(--accent); }
+  .sans, nav, figcaption, table, .etiq, button, .bouton, input, textarea { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  code, .mono { font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace; font-size: .82em; }
+
+  /* En-tête */
+  .haut { display: flex; justify-content: space-between; align-items: baseline; padding-top: 1.2rem; font-size: .8rem; }
+  .haut nav a { margin-left: 1.1rem; text-decoration: none; }
+  .haut nav a:hover { text-decoration: underline; }
+  .marque { font-family: Georgia, serif; font-size: 1.1rem; text-decoration: none; letter-spacing: .02em; }
+  .une { padding-top: 4.5rem; padding-bottom: 1rem; }
+  h1 { font-size: clamp(2.6rem, 7vw, 4.2rem); font-weight: normal; line-height: 1.05; margin: 0 0 1rem; letter-spacing: -.01em; }
+  .chapeau { font-size: 1.25rem; max-width: 36rem; margin: 0 0 1.6rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .85rem; }
+  .bouton { display: inline-block; border: 1px solid var(--encre); padding: .5rem 1rem; text-decoration: none; background: none; color: var(--encre); cursor: pointer; font-size: .85rem; transition: background .2s, color .2s; }
+  .bouton:hover, .bouton.plein { background: var(--encre); color: var(--fond); }
+  .bouton.plein:hover { background: var(--fond); color: var(--encre); }
+
+  /* Animation d'ouverture */
+  .scene { position: relative; height: 210px; margin: 3rem 0 .4rem; border-top: 1px solid var(--trait); border-bottom: 1px solid var(--trait); overflow: hidden; }
+  .piece { position: absolute; height: 26px; border: 1px solid var(--encre); background: var(--fond); font: 10px/24px ui-monospace, monospace; text-align: center; overflow: hidden; white-space: nowrap; transition: left 1s cubic-bezier(.6,.05,.25,1), top 1s cubic-bezier(.6,.05,.25,1), opacity .6s, transform 1s; }
+  .piece.texte { background: var(--pale); }
+  .bloc { position: absolute; top: 92px; height: 26px; border: 1px solid var(--encre); background: var(--fond); opacity: 0; transition: width 1.1s cubic-bezier(.6,.05,.25,1), opacity .5s, background .6s, left 1.1s cubic-bezier(.6,.05,.25,1); }
+  .bloc.ferme { background: repeating-linear-gradient(135deg, var(--encre) 0 2px, var(--fond) 2px 6px); }
+  .bloc .cle { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); font: 11px system-ui, sans-serif; color: var(--gris); white-space: nowrap; opacity: 0; transition: opacity .5s; }
+  .bloc.ferme .cle { opacity: 1; }
+  .legende-scene { display: flex; justify-content: space-between; font-size: .8rem; color: var(--gris); min-height: 1.4rem; }
+  .etapes-scene span { margin-right: .9rem; transition: color .3s; }
+  .etapes-scene span.actif { color: var(--encre); text-decoration: underline; text-underline-offset: 4px; }
+
+  /* Sections */
+  section { padding: 2.2rem 0 1rem; }
+  h2 { font-size: 1.7rem; font-weight: normal; margin: 0 0 1rem; }
+  h2 .num { font: .75rem system-ui, sans-serif; color: var(--gris); display: block; letter-spacing: .08em; margin-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .4rem; }
+  hr { border: 0; border-top: 1px solid var(--trait); margin: 2.5rem 0 0; }
+  .note { border-left: 2px solid var(--accent); padding: .2rem 0 .2rem 1rem; margin: 1.5rem 0; }
+  ul.net, ol.net { padding-left: 1.2rem; }
+  li { margin: .4rem 0; }
+
+  .revele { opacity: 0; transform: translateY(14px); transition: opacity .8s ease, transform .8s ease; }
+  .revele.vu { opacity: 1; transform: none; }
+
+  /* Étapes */
+  .etapes { list-style: none; padding: 0; margin: 1.5rem 0; counter-reset: e; }
+  .etapes li { display: grid; grid-template-columns: 2.4rem 1fr; gap: .6rem; padding: .9rem 0; border-top: 1px solid var(--trait); counter-increment: e; }
+  .etapes li::before { content: counter(e, decimal-leading-zero); font: .8rem system-ui, sans-serif; color: var(--gris); padding-top: .25rem; }
+
+  /* Format interactif */
+  .format { display: flex; margin: 1.4rem 0 .6rem; height: 56px; font-size: .78rem; }
+  .format button { border: 1px solid var(--encre); margin-left: -1px; background: var(--fond); cursor: pointer; padding: 0 .4rem; transition: background .25s, color .25s; line-height: 1.25; }
+  .format button small { display: block; color: var(--gris); font-size: .68rem; }
+  .format button[aria-pressed="true"] { background: var(--encre); color: var(--fond); }
+  .format button[aria-pressed="true"] small { color: #cfcfcf; }
+  .format .pointille { border-style: dashed; cursor: default; color: var(--gris); }
+  .detail { min-height: 9rem; font-size: .95rem; }
+  .detail table { margin-top: .5rem; }
+
+
+  /* Science */
+  .figure { margin: 1.6rem 0 2.6rem; }
+  .figure .question { font-size: 1.15rem; margin: 0 0 .4rem; }
+  .commande { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; font: .82rem system-ui, sans-serif; margin: .8rem 0; }
+  .commande input[type=range] { accent-color: var(--accent); width: 11rem; }
+  .commande input[type=text] { font: .9rem ui-monospace, monospace; border: 1px solid var(--trait); padding: .3rem .5rem; width: 9rem; }
+  .commande .choix button { border: 1px solid var(--encre); background: var(--fond); padding: .25rem .6rem; margin-left: -1px; cursor: pointer; font: inherit; }
+  .commande .choix button[aria-pressed="true"] { background: var(--encre); color: var(--fond); }
+  .chiffre { font: 600 1.05rem system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .petit { font: .78rem system-ui, sans-serif; color: var(--gris); }
+  #pigeons svg circle { transition: fill .4s, stroke .4s; }
+  #pigeons svg line { transition: opacity .5s; }
+  .chaleur { font: .8rem/1.55 ui-monospace, monospace; white-space: pre-wrap; border: 1px solid var(--trait); padding: .8rem; max-height: 17rem; overflow: auto; }
+  .chaleur span { transition: background-color .25s; }
+  .gamme { display: flex; align-items: center; gap: .5rem; font: .72rem system-ui, sans-serif; color: var(--gris); margin-top: .4rem; }
+  .gamme b { display: inline-block; width: 9rem; height: .55rem; background: linear-gradient(90deg, #fff, var(--accent)); border: 1px solid var(--trait); }
+  #intervalles text { font: 11px system-ui, sans-serif; }
+  #intervalles .ligne { opacity: 0; transition: opacity .5s; }
+  #intervalles .ligne.vue { opacity: 1; }
+  .sortie-decodee { font: .85rem/1.6 ui-monospace, monospace; border: 1px solid var(--trait); padding: .7rem .8rem; min-height: 3.4rem; white-space: pre-wrap; word-break: break-all; }
+  .sortie-decodee .faux { background: var(--accent); color: #fff; }
+  .flottants { font: .85rem/1.7 ui-monospace, monospace; border-left: 2px solid var(--trait); padding-left: 1rem; }
+
+  /* Démonstration */
+  .demo { border: 1px solid var(--encre); padding: 1.2rem; margin: 1.4rem 0; }
+  .demo label { font-size: .8rem; display: block; margin-bottom: .3rem; }
+  .demo textarea { width: 100%; font: .85rem ui-monospace, monospace; border: 1px solid var(--trait); padding: .5rem; resize: vertical; min-height: 3.2rem; }
+  .octets { display: flex; flex-wrap: wrap; gap: 3px; margin: .8rem 0; font: 11px ui-monospace, monospace; }
+  .octets button { width: 2.05rem; padding: 3px 0; border: 1px solid var(--trait); background: var(--fond); cursor: pointer; font: inherit; transition: background .2s, border-color .2s; }
+  .octets button:hover { border-color: var(--encre); }
+  .octets button.etiquette { background: var(--pale); }
+  .octets button.touche { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .octets.secoue { animation: secoue .4s; }
+  @keyframes secoue { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+  .verdict { font-size: .9rem; padding: .55rem .8rem; border: 1px solid var(--trait); transition: background .3s, color .3s; }
+  .verdict.ok { border-color: var(--encre); }
+  .verdict.ko { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .legende-demo { font-family: system-ui, sans-serif; font-size: .75rem; color: var(--gris); display: flex; gap: 1.2rem; flex-wrap: wrap; }
+  .legende-demo i { display: inline-block; width: .8rem; height: .8rem; border: 1px solid var(--trait); vertical-align: -1px; margin-right: .3rem; }
+
+  /* Mesures */
+  .graphe { margin: 1.2rem 0 .4rem; font-size: .8rem; }
+  .graphe .titre { font-size: .9rem; margin-bottom: .6rem; }
+  .barre { display: grid; grid-template-columns: 11.5rem 1fr 4.2rem; align-items: center; gap: .6rem; margin: .35rem 0; }
+  .barre .nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .barre .piste { height: 14px; background: var(--pale); position: relative; }
+  .barre .rempli { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--gris); transition: width 1.3s cubic-bezier(.3,.6,.2,1); }
+  .barre.saku .rempli { background: var(--accent); }
+  .barre.saku .nom, .barre.saku .val { font-weight: 600; }
+  .barre .val { text-align: right; font-variant-numeric: tabular-nums; }
+  .axe { font-size: .72rem; color: var(--gris); margin-left: 12.1rem; }
+  details { margin: 1.2rem 0; }
+  summary { cursor: pointer; font-family: system-ui, sans-serif; font-size: .85rem; }
+  .defile { overflow-x: auto; margin: .8rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .76rem; }
+  caption { text-align: left; font-size: .85rem; padding-bottom: .4rem; color: var(--gris); }
+  th, td { border-bottom: 1px solid var(--trait); padding: .35rem .5rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; border-bottom-color: var(--encre); vertical-align: bottom; white-space: normal; }
+  tr.saku td { font-weight: 600; }
+  td.vide { text-align: left; color: var(--gris); white-space: normal; }
+
+  /* Terminal */
+  .terminal { background: #161616; color: #e8e6e1; padding: 1rem 1.1rem; font: .8rem/1.7 ui-monospace, monospace; min-height: 13.5rem; white-space: pre-wrap; overflow-x: auto; }
+  .terminal .invite { color: #9a9a9a; }
+  .terminal .com { color: #9a9a9a; }
+  .curseur { display: inline-block; width: .55em; height: 1.05em; background: #e8e6e1; vertical-align: text-bottom; animation: clignote 1s steps(1) infinite; }
+  @keyframes clignote { 50% { opacity: 0; } }
+  dl.prerequis dt { font-weight: bold; margin-top: 1rem; }
+  dl.prerequis dd { margin: 0; }
+
+  /* Verrous */
+  .verrous { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0; margin: 1.4rem 0; border-top: 1px solid var(--encre); }
+  .verrous div { padding: 1rem 1rem 1rem 0; }
+  .verrous div + div { padding-left: 1rem; border-left: 1px solid var(--trait); }
+  .verrous b { display: block; margin-bottom: .3rem; }
+  .verrous .etat { font: .72rem system-ui, sans-serif; color: var(--accent); letter-spacing: .05em; }
+  .feuille { list-style: none; padding: 0; }
+  .feuille li { padding-left: 1.6rem; position: relative; }
+  .feuille li::before { content: ""; position: absolute; left: 0; top: .45em; width: .75rem; height: .75rem; border: 1px solid var(--encre); }
+  .feuille li.fait::before { background: var(--encre); }
+
+  footer { margin-top: 3rem; padding: 1.4rem 0 3rem; border-top: 1px solid var(--trait); font-size: .85rem; color: var(--gris); }
+
+  @media (max-width: 34rem) {
+    html { font-size: 16px; }
+    .haut nav { display: none; }
+    .barre { grid-template-columns: 7.5rem 1fr 3.6rem; }
+    .axe { margin-left: 8.1rem; }
+    .format { font-size: .66rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .revele { opacity: 1; transform: none; transition: none; }
+    .piece, .bloc, .rempli { transition: none !important; }
+    .curseur, .octets.secoue { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="large haut">
+  <a class="marque" href="#">Saku</a>
+  <nav>
+    <a href="#fonctionnement">Fonctionnement</a>
+    <a href="#science">La science</a>
+    <a href="#essai">Essayer</a>
+    <a href="#mesures">Mesures</a>
+    <a href="#installer">Installer</a>
+    <a href="#suite">La suite</a>
+    <a href="https://github.com/Dimitri-Rey/SAKU">GitHub</a>
+  </nav>
+</div>
+
+<header class="large une">
+  <h1>Compresser, puis chiffrer.<br>Et ne rien promettre<br>qu'on n'a pas mesuré.</h1>
+  <p class="chapeau">Saku est un archiveur libre : un format documenté octet par octet, un chiffrement authentifié standard, un lecteur qui se méfie de tout ce qu'il lit. Prochaine étape : un codec neuronal sans perte pour le code et le texte.</p>
+  <div class="actions">
+    <a class="bouton plein" href="https://github.com/Dimitri-Rey/SAKU">Voir le code</a>
+    <a class="bouton" href="#installer">Installer</a>
+    <a class="bouton" href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/FORMAT-v0.md">Lire la spécification</a>
+  </div>
+
+  <div class="scene" id="scene" aria-hidden="true"></div>
+  <div class="legende-scene sans">
+    <div class="etapes-scene" id="etapes-scene"><span>fichiers</span><span>un seul flux</span><span>blocs de 8 Mio</span><span>compression</span><span>chiffrement</span></div>
+    <div id="texte-scene"></div>
+  </div>
+</header>
+
+<main>
+
+<div class="col">
+<section class="revele">
+  <p class="note">Version 0.1.0, prototype. Le codec neuronal n'est pas encore écrit : aujourd'hui Saku compresse avec zstd, et ne fait donc <strong>pas mieux que zstd</strong>. Les mesures plus bas le montrent sans détour. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
+  <h3>Ce que Saku ne promettra jamais</h3>
+  <ul class="net">
+    <li><strong>Un ratio universel.</strong> Réduire n'importe quel gigaoctet à un mégaoctet est impossible : il n'existe pas assez de petits fichiers pour représenter tous les gros. Des données déjà compressées ou aléatoires ne rétrécissent pas.</li>
+    <li><strong>Un chiffre sans mesure.</strong> Chaque résultat vient d'un aller-retour vérifié octet pour octet, et la taille du modèle compte dans le ratio.</li>
+    <li><strong>Du génératif sur du texte ou des chiffres.</strong> Ce que vous archivez, vous le retrouvez à l'identique.</li>
+  </ul>
+</section>
+
+<hr>
+<section id="fonctionnement" class="revele">
+  <h2><span class="num">01</span>Comment ça fonctionne</h2>
+  <ol class="etapes">
+    <li><div><strong>Collecte.</strong> Les dossiers sont parcourus sans suivre les liens symboliques. Chaque fichier reçoit une empreinte SHA-256, qui servira à contrôler l'extraction.</div></li>
+    <li><div><strong>Routage.</strong> Les fichiers sont classés en texte ou en binaire, puis rangés par extension et par chemin. Les contenus qui se ressemblent deviennent voisins, ce qui aide le compresseur.</div></li>
+    <li><div><strong>Découpage.</strong> Le tout forme un seul flux, coupé en blocs indépendants de 8 Mio. Un bloc ne mélange jamais texte et binaire, et chacun se lit seul : c'est ce qui permet d'extraire un fichier sans tout décompresser.</div></li>
+    <li><div><strong>Compression.</strong> Chaque bloc passe par zstd au niveau 19, ou reste tel quel si la compression ne gagne rien. Le codec neuronal prendra cette place.</div></li>
+    <li><div><strong>Chiffrement</strong>, si vous le demandez. Chaque bloc compressé est scellé par AES-256-GCM. D'abord compresser, ensuite chiffrer : des données chiffrées ne se compressent plus.</div></li>
+    <li><div><strong>Index.</strong> La liste des fichiers et des blocs est écrite à la fin, compressée et chiffrée elle aussi.</div></li>
+  </ol>
+
+  <h3>L'archive, octet par octet</h3>
+  <p>Cliquez sur une partie de l'archive.</p>
+  <div class="format sans" role="group" aria-label="Parties d'une archive Saku">
+    <button style="flex:1.1" data-part="entete" aria-pressed="true">En-tête<small>80 octets</small></button>
+    <button style="flex:1.6" data-part="bloc" aria-pressed="false">Bloc 0<small>données</small></button>
+    <button style="flex:1.6" data-part="bloc" aria-pressed="false">Bloc 1<small>données</small></button>
+    <span class="pointille" style="flex:.8;border:1px dashed var(--encre);margin-left:-1px;display:flex;align-items:center;justify-content:center">…</span>
+    <button style="flex:1.7" data-part="index" aria-pressed="false">Index<small>fichiers, blocs</small></button>
+    <button style="flex:1.1" data-part="pied" aria-pressed="false">Pied<small>16 octets</small></button>
+  </div>
+  <div class="detail" id="detail" aria-live="polite"></div>
+  <p class="sans" style="font-size:.85rem">Spécification complète, avec chaque borne et chaque cas de rejet : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/FORMAT-v0.md">FORMAT-v0.md</a>. Elle doit suffire à écrire un autre lecteur sans lire le code.</p>
+
+  <h3>Le chiffrement</h3>
+  <p>Aucun algorithme maison : tout vient de la bibliothèque <span class="mono">cryptography</span>. La clé est tirée de la phrase de passe par Argon2id (3 passes, 256 Mio de mémoire, sel aléatoire par archive). Chaque bloc est scellé par AES-256-GCM, avec son numéro dans le nonce et l'empreinte de l'en-tête dans les données associées. Deux blocs échangés, un paramètre modifié, un bit retourné : l'archive est refusée.</p>
+  <p>Ce qui reste visible dans une archive chiffrée : sa taille, le nombre de blocs et la taille de chacun. Les noms de fichiers sont dans l'index, donc chiffrés.</p>
+</section>
+
+<hr>
+<section id="science" class="revele">
+  <h2><span class="num">02</span>La science, en direct</h2>
+  <p>Quatre idées suffisent pour comprendre ce que Saku peut faire, ce qu'il ne pourra jamais faire, et pourquoi son prochain chantier est la reproductibilité. Chaque figure calcule vraiment ce qu'elle montre, dans votre navigateur.</p>
+
+  <div class="figure revele" id="pigeons">
+    <p class="question"><strong>1. Pourquoi aucun outil ne compresse tout.</strong></p>
+    <p>Un compresseur sans perte doit donner un résultat différent à chaque fichier différent, sinon il ne saurait pas lequel restituer. Or il y a 2<sup>n</sup> fichiers de n bits, et seulement 2<sup>n</sup> − 1 fichiers plus courts, en comptant le fichier vide. Il manque toujours au moins une place : si certains fichiers rétrécissent, d'autres grossissent forcément.</p>
+    <div class="commande"><label for="n-bits">Taille des fichiers : <span class="chiffre" id="n-val">3</span> bits</label><input id="n-bits" type="range" min="1" max="5" value="3"></div>
+    <svg viewBox="0 0 640 200" role="img" aria-label="Appariement des fichiers de n bits avec les fichiers plus courts"></svg>
+    <p class="petit" id="pigeons-texte"></p>
+    <p>Appliqué à « 1 Go vers 1 Mo » : parmi tous les fichiers d'un gigaoctet, moins d'<strong>un sur 2<sup>7 991 999 999</sup></strong> peut tenir dans un mégaoctet : un nombre qui s'écrit avec plus de deux milliards de chiffres. Un compresseur ne gagne que sur les données qui ont une structure, et c'est cette structure qu'il faut savoir prédire.</p>
+  </div>
+
+  <div class="figure revele" id="prediction">
+    <p class="question"><strong>2. Compresser, c'est prédire.</strong></p>
+    <p>Shannon l'a montré en 1948 : un symbole qu'on attendait avec la probabilité <i>p</i> coûte au mieux −log<sub>2</sub> <i>p</i> bits. Un caractère prévu à 50 % coûte 1 bit ; prévu à 1 %, près de 7. Ci-dessous, un petit modèle apprend le texte au fil de la lecture, en regardant les caractères qui précèdent. Plus la case est foncée, plus le caractère était imprévu, donc cher.</p>
+    <div class="commande"><span>Mémoire du modèle :</span><span class="choix" id="ordres"><button data-o="0" aria-pressed="false">aucune</button><button data-o="1" aria-pressed="false">1 car.</button><button data-o="2" aria-pressed="true">2 car.</button><button data-o="3" aria-pressed="false">3 car.</button><button data-o="5" aria-pressed="false">5 car.</button></span></div>
+    <div class="chaleur" id="chaleur" contenteditable="plaintext-only" spellcheck="false"></div>
+    <div class="gamme"><span>0 bit</span><b></b><span>8 bits et plus</span></div>
+    <p class="commande"><span>Coût moyen : <span class="chiffre" id="cout">–</span> bits par caractère</span><span class="petit">sans modèle : 8 bits · le texte est modifiable</span></p>
+    <p class="petit">Essayez « 5 car. » : sur un texte aussi court, une mémoire trop longue n'a pas le temps d'apprendre et le coût remonte. C'est pour cela que les vrais modèles sont entraînés à l'avance sur de grands corpus, et que leur taille compte dans le ratio. Modèle de démonstration (contextes de longueur fixe, appris en direct), pas le codec de Saku. Un modèle de langage fait la même chose avec un contexte de milliers de caractères : c'est pourquoi il compresse le texte bien mieux que zstd.</p>
+  </div>
+
+  <div class="figure revele" id="arith">
+    <p class="question"><strong>3. Le codage arithmétique : transformer des probabilités en bits.</strong></p>
+    <p>Le message entier devient un seul nombre entre 0 et 1. On part de l'intervalle [0, 1) ; à chaque caractère, on garde la part qui lui revient, proportionnelle à sa probabilité. Un caractère probable rétrécit peu l'intervalle, un caractère rare le rétrécit beaucoup. À la fin, il suffit d'écrire un nombre qui tombe dans la plage restante : il faut environ −log<sub>2</sub>(largeur) bits.</p>
+    <div class="commande"><label for="mot">Message :</label><input id="mot" type="text" maxlength="10" value="saku"><button class="bouton" id="rejouer" type="button">Rejouer</button></div>
+    <svg id="intervalles" viewBox="0 0 640 60" role="img" aria-label="Intervalles successifs du codage arithmétique"></svg>
+    <p class="commande"><span>Largeur finale : <span class="chiffre" id="largeur">–</span></span><span>Bits nécessaires : <span class="chiffre" id="bits-arith">–</span></span><span class="petit" id="bits-brut"></span></p>
+    <p class="petit">Probabilités fixes tirées de la fréquence des lettres d'un texte en français, pour la démonstration.</p>
+  </div>
+
+  <div class="figure revele" id="determinisme">
+    <p class="question"><strong>4. Pourquoi le déterminisme est le verrou n° 1.</strong></p>
+    <p>Le décodeur doit refaire exactement les mêmes découpages que l'encodeur. Or en virgule flottante, l'ordre des calculs change le résultat. Votre navigateur, à l'instant :</p>
+    <p class="flottants" id="flottants"></p>
+    <p>Un processeur qui additionne dans un autre ordre, et une probabilité change d'un cheveu. Voici un vrai codeur arithmétique en entiers : le message est encodé, puis décodé soit avec le même modèle, soit avec un modèle où <strong>deux fréquences diffèrent d'une unité sur 65 536</strong> (l'une gagne ce que l'autre perd, le total ne change pas).</p>
+    <div class="commande"><span class="choix" id="decodeurs"><button data-d="0" aria-pressed="true">même modèle</button><button data-d="1" aria-pressed="false">modèle décalé d'un 65 536<sup>e</sup></button></span><span class="petit" id="poids"></span></div>
+    <div class="sortie-decodee" id="decode" aria-live="polite"></div>
+    <p class="petit" id="decode-texte"></p>
+    <p>D'où le choix de Saku : le futur codec calculera ses probabilités <strong>uniquement en nombres entiers</strong>, pour que n'importe quelle machine retrouve les mêmes, bit pour bit.</p>
+  </div>
+</section>
+
+<hr>
+<section id="essai" class="revele">
+  <h2><span class="num">03</span>Essayez : un bit suffit</h2>
+  <p>Cette démonstration tourne dans votre navigateur, avec le même algorithme que Saku (AES-256-GCM, par l'API WebCrypto). Le texte est chiffré avec une clé aléatoire. Cliquez sur n'importe quel octet pour en retourner un bit, puis regardez ce que donne le déchiffrement.</p>
+  <div class="demo">
+    <label for="clair">Texte à chiffrer</label>
+    <textarea id="clair" spellcheck="false">def bonjour():
+    return "Saku"</textarea>
+    <div class="octets" id="octets" aria-label="Octets chiffrés, cliquables"></div>
+    <div class="legende-demo"><span><i></i>donnée chiffrée</span><span><i style="background:var(--pale)"></i>étiquette d'authentification (16 octets)</span><span><i style="background:var(--accent);border-color:var(--accent)"></i>bit modifié</span></div>
+    <p class="verdict sans" id="verdict" aria-live="polite">Chiffrement…</p>
+    <button class="bouton" id="retablir" type="button">Rétablir l'original</button>
+  </div>
+  <p class="sans" style="font-size:.82rem;color:var(--gris)">Dans Saku, la clé vient de votre phrase de passe par Argon2id, que les navigateurs ne proposent pas ; ici elle est simplement tirée au hasard. Rien ne quitte votre machine.</p>
+</section>
+
+<hr>
+<section id="mesures" class="revele">
+  <h2><span class="num">04</span>Ce qui est mesuré</h2>
+  <p>Chaque outil compresse le corpus, le décompresse, et le résultat est comparé à l'original octet pour octet. Un chiffre n'apparaît que si la comparaison réussit. Mesures du 10 novembre 2026 sur deux Xeon E5-2678 v3, sans carte graphique, un seul fil par outil.</p>
+  <div id="graphes"></div>
+  <p class="sans" style="font-size:.78rem;color:var(--gris)">Bits par octet d'origine : plus la barre est courte, mieux c'est. 8 bits par octet, c'est l'absence de compression.</p>
+  <h3>Ce que disent ces chiffres</h3>
+  <ul class="net">
+    <li><strong>Saku ne bat pas zstd aujourd'hui.</strong> Sur les corpus entiers, son archive est plus grosse de 1,7 à 3 % que celle de <span class="mono">zstd -19</span>, et de 5 à 6,4 % que celle de <span class="mono">xz -9</span>. C'est attendu : il utilise zstd par blocs séparés, et son index porte une empreinte par fichier.</li>
+    <li><strong>Chiffrer ne coûte presque rien en taille</strong> : 51 et 128 octets de plus sur les deux corpus.</li>
+    <li><strong>L'extraction est lente</strong>, 25 à 45 Mo/s : Saku écrit et contrôle chaque fichier, là où les autres ne restituent qu'un tar, et le prototype est en Python.</li>
+  </ul>
+  <details>
+    <summary>Tous les chiffres : vitesse, mémoire, ratio modèle compris</summary>
+<!--MESURES-->
+<div class="defile"><table><caption>code-perso — 709 fichiers, 11 938 143 octets</caption>
+<thead><tr><th>Outil</th><th>Archive (octets)</th><th>bits/octet</th><th>Ratio</th><th>Ratio, modèle compris</th><th>Compression (Mo/s)</th><th>Décompression (Mo/s)</th><th>Mémoire compr. (Mio)</th><th>Mémoire décompr. (Mio)</th></tr></thead><tbody>
+<tr><td>zstd-19</td><td>1 787 014</td><td>1,198</td><td>6,68</td><td>6,68</td><td>3,2</td><td>375,6</td><td>98</td><td>24</td></tr>
+<tr><td>zstd-22-long</td><td>1 783 228</td><td>1,195</td><td>6,69</td><td>6,69</td><td>1,8</td><td>378,6</td><td>282</td><td>26</td></tr>
+<tr><td>xz-9</td><td>1 753 708</td><td>1,175</td><td>6,81</td><td>6,81</td><td>2,8</td><td>125,9</td><td>174</td><td>26</td></tr>
+<tr class="saku"><td>saku</td><td>1 841 226</td><td>1,234</td><td>6,48</td><td>6,48</td><td>3,1</td><td>25,3</td><td>132</td><td>54</td></tr>
+<tr class="saku"><td>saku-chiffre</td><td>1 841 277</td><td>1,234</td><td>6,48</td><td>6,48</td><td>2,7</td><td>11,2</td><td>284</td><td>284</td></tr>
+</tbody></table></div>
+<div class="defile"><table><caption>cpython — 5 045 fichiers, 112 691 061 octets</caption>
+<thead><tr><th>Outil</th><th>Archive (octets)</th><th>bits/octet</th><th>Ratio</th><th>Ratio, modèle compris</th><th>Compression (Mo/s)</th><th>Décompression (Mo/s)</th><th>Mémoire compr. (Mio)</th><th>Mémoire décompr. (Mio)</th></tr></thead><tbody>
+<tr><td>zstd-19</td><td>23 971 699</td><td>1,702</td><td>4,70</td><td>4,70</td><td>2,1</td><td>649,7</td><td>206</td><td>40</td></tr>
+<tr><td>zstd-22-long</td><td>23 200 760</td><td>1,647</td><td>4,86</td><td>4,86</td><td>1,4</td><td>425,3</td><td>846</td><td>115</td></tr>
+<tr><td>xz-9</td><td>22 909 784</td><td>1,626</td><td>4,92</td><td>4,92</td><td>2,1</td><td>101,9</td><td>674</td><td>67</td></tr>
+<tr class="saku"><td>saku</td><td>24 384 040</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,5</td><td>45,1</td><td>147</td><td>73</td></tr>
+<tr class="saku"><td>saku-chiffre</td><td>24 384 168</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,6</td><td>35,9</td><td>284</td><td>284</td></tr>
+</tbody></table></div>
+<!--/MESURES-->
+  </details>
+  <p class="sans" style="font-size:.85rem">Les corpus : les sources de CPython 3.14.0, que chacun peut télécharger, et un lot de code d'applications privées. Protocole et commandes pour refaire les mesures : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/BENCHMARK.md">BENCHMARK.md</a>.</p>
+</section>
+
+<hr>
+<section id="installer" class="revele">
+  <h2><span class="num">05</span>Ce qu'il faut pour le faire tourner</h2>
+  <dl class="prerequis">
+    <dt>Linux ou macOS</dt><dd>Windows n'est pas testé.</dd>
+    <dt>Python 3.14 ou plus récent</dt><dd>Saku utilise le module zstd entré dans la bibliothèque standard avec cette version.</dd>
+    <dt>uv</dt><dd>Pour installer l'environnement et la seule dépendance, <span class="mono">cryptography</span> : <a href="https://docs.astral.sh/uv/">docs.astral.sh/uv</a>.</dd>
+    <dt>De la mémoire</dt><dd>Environ 150 Mio pour créer une archive, près de 300 Mio si elle est chiffrée : la dérivation de clé en réserve 256 à elle seule.</dd>
+    <dt>Pas de carte graphique</dt><dd>Rien dans la version actuelle n'en a besoin.</dd>
+  </dl>
+  <h3>En quatre commandes</h3>
+  <div class="terminal" id="terminal" role="img" aria-label="Exemple de session : installation, création chiffrée, liste et extraction d'un fichier"></div>
+  <p class="sans" style="font-size:.85rem">La phrase de passe est demandée au clavier, ou lue dans <span class="mono">SAKU_MOT_DE_PASSE</span>. Jamais en argument : elle resterait dans l'historique du terminal.</p>
+</section>
+
+<hr>
+<section id="suite" class="revele">
+  <h2><span class="num">06</span>La suite : le codec neuronal</h2>
+  <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre.</p>
+  <div class="verrous">
+    <div><span class="etat">EN COURS</span><b>Reproductibilité</b>Le décodeur doit recalculer exactement les mêmes probabilités. En virgule flottante, un processeur différent suffit à rendre l'archive illisible. Le codec de Saku calculera en nombres entiers.</div>
+    <div><span class="etat">ENSUITE</span><b>Taille du modèle</b>Le modèle fait partie du décodeur et compte dans le ratio. Un modèle de 170 Mo ne se rembourse que sur de très grosses archives.</div>
+    <div><span class="etat">ENSUITE</span><b>Vitesse</b>Ces compresseurs avancent en kilooctets par seconde sur un processeur. Un archiveur du quotidien ne peut pas être aussi lent.</div>
+  </div>
+  <p>Si le codec neuronal ne bat pas xz et zstd, modèle compris et à un débit supportable, Saku n'a pas de raison d'exister. Les conditions d'abandon sont écrites à l'avance : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/RISQUES.md">RISQUES.md</a>.</p>
+  <h3>Feuille de route</h3>
+  <ul class="feuille">
+    <li class="fait">Format v0, conteneur, chiffrement authentifié</li>
+    <li class="fait">Lecteur durci, tests d'archives hostiles</li>
+    <li class="fait">Banc de mesure vérifié contre zstd, xz, cmix et ts_zip</li>
+    <li>Codec neuronal sans perte en arithmétique entière</li>
+    <li>Reproductibilité prouvée entre machines (x86-64, ARM64)</li>
+    <li>Conteneurs déjà compressés (.docx, .zip, JPEG) reconstruits à l'identique</li>
+    <li>Correction d'erreurs, clé enveloppée, ajout de fichiers</li>
+    <li>Mode avec perte pour les médias, uniquement sur demande explicite</li>
+  </ul>
+</section>
+</div>
+</main>
+
+<footer class="col">
+  <p>Saku est un logiciel libre sous licence MIT. Code, spécification et mesures : <a href="https://github.com/Dimitri-Rey/SAKU">github.com/Dimitri-Rey/SAKU</a>.</p>
+  <p>Page mise à jour le 10 novembre 2026.</p>
+</footer>
+
+<!--DONNEES-->
+<script type="application/json" id="donnees">[{"corpus": "code-perso", "outil": "zstd-19", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1787014, "octets_modele": 0, "bits_par_octet": 1.1975, "ratio": 6.68, "ratio_modele_compris": 6.6805, "compression_mo_s": 3.1709, "decompression_mo_s": 375.6479, "ram_compression_mio": 98, "ram_decompression_mio": 24, "fichiers": 709}, {"corpus": "code-perso", "outil": "zstd-22-long", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1783228, "octets_modele": 0, "bits_par_octet": 1.195, "ratio": 6.695, "ratio_modele_compris": 6.6947, "compression_mo_s": 1.8055, "decompression_mo_s": 378.6236, "ram_compression_mio": 282, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "xz-9", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1753708, "octets_modele": 0, "bits_par_octet": 1.1752, "ratio": 6.807, "ratio_modele_compris": 6.8074, "compression_mo_s": 2.7862, "decompression_mo_s": 125.9484, "ram_compression_mio": 174, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841226, "octets_modele": 0, "bits_par_octet": 1.2338, "ratio": 6.484, "ratio_modele_compris": 6.4838, "compression_mo_s": 3.1189, "decompression_mo_s": 25.341, "ram_compression_mio": 132, "ram_decompression_mio": 54, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku-chiffre", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841277, "octets_modele": 0, "bits_par_octet": 1.2339, "ratio": 6.484, "ratio_modele_compris": 6.4836, "compression_mo_s": 2.7377, "decompression_mo_s": 11.1654, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 709}, {"corpus": "cpython", "outil": "zstd-19", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23971699, "octets_modele": 0, "bits_par_octet": 1.7018, "ratio": 4.701, "ratio_modele_compris": 4.701, "compression_mo_s": 2.1437, "decompression_mo_s": 649.6566, "ram_compression_mio": 206, "ram_decompression_mio": 40, "fichiers": 5045}, {"corpus": "cpython", "outil": "zstd-22-long", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23200760, "octets_modele": 0, "bits_par_octet": 1.647, "ratio": 4.857, "ratio_modele_compris": 4.8572, "compression_mo_s": 1.4398, "decompression_mo_s": 425.2976, "ram_compression_mio": 846, "ram_decompression_mio": 115, "fichiers": 5045}, {"corpus": "cpython", "outil": "xz-9", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 22909784, "octets_modele": 0, "bits_par_octet": 1.6264, "ratio": 4.919, "ratio_modele_compris": 4.9189, "compression_mo_s": 2.0737, "decompression_mo_s": 101.8836, "ram_compression_mio": 674, "ram_decompression_mio": 67, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384040, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.622, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.525, "decompression_mo_s": 45.0901, "ram_compression_mio": 147, "ram_decompression_mio": 73, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku-chiffre", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384168, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.621, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.6146, "decompression_mo_s": 35.901, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 5045}]</script>
+<!--/DONNEES-->
+
+<script>
+(() => {
+  const calme = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const echapper = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  const nb = (x, d) => x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  /* Apparition au défilement */
+  const vigie = new IntersectionObserver((entrees) => {
+    for (const e of entrees) if (e.isIntersecting) { e.target.classList.add("vu"); e.target.dispatchEvent(new Event("vu")); vigie.unobserve(e.target); }
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".revele").forEach((n) => vigie.observe(n));
+
+  /* Animation d'ouverture : fichiers → flux → blocs → compression → chiffrement */
+  const scene = document.getElementById("scene");
+  const etapes = [...document.querySelectorAll("#etapes-scene span")];
+  const texte = document.getElementById("texte-scene");
+  const RATIO = 4.62; // Saku 0.1.0 sur CPython 3.14.0, mesuré
+  const noms = ["main.py", "README.md", "app.js", "util.py", "logo.png", "api.ts", "test.py", "style.css", "index.md", "data.bin", "cli.py", "font.woff"];
+  let pieces = [], blocs = [], phase = 0;
+
+  function construire() {
+    scene.innerHTML = ""; pieces = []; blocs = [];
+    const W = scene.clientWidth;
+    const largeurs = noms.map((n) => 44 + n.length * 4);
+    const total = largeurs.reduce((a, b) => a + b, 0);
+    const k = Math.min(1, (W - 60) / total);
+    let x = (W - total * k) / 2;
+    noms.forEach((nom, i) => {
+      const p = document.createElement("div");
+      const texteFichier = !/\.(png|bin|woff)$/.test(nom);
+      p.className = "piece" + (texteFichier ? " texte" : "");
+      p.textContent = nom;
+      p.style.width = largeurs[i] * k + "px";
+      p.dataset.ligne = x;
+      p.dataset.texte = texteFichier ? 1 : 0;
+      p.dataset.vracX = 10 + Math.random() * (W - largeurs[i] * k - 20);
+      p.dataset.vracY = 12 + Math.random() * 160;
+      x += largeurs[i] * k;
+      scene.appendChild(p); pieces.push(p);
+    });
+  }
+
+  function groupes() {
+    // Comme Saku : texte d'abord, binaire ensuite, jamais mélangés dans un bloc.
+    const textes = pieces.filter((p) => p.dataset.texte === "1"), autres = pieces.filter((p) => p.dataset.texte === "0");
+    const moitie = Math.ceil(textes.length / 2);
+    return [textes.slice(0, moitie), textes.slice(moitie), autres];
+  }
+
+  function afficher(n) {
+    phase = n;
+    etapes.forEach((e, i) => e.classList.toggle("actif", i === n));
+    const W = scene.clientWidth;
+    if (n === 0) {
+      blocs.forEach((b) => b.remove()); blocs = [];
+      pieces.forEach((p) => { p.style.opacity = 1; p.style.left = p.dataset.vracX + "px"; p.style.top = p.dataset.vracY + "px"; });
+      texte.textContent = "des fichiers, texte et binaire";
+    } else if (n === 1) {
+      const ordre = groupes().flat();
+      const total = ordre.reduce((a, p) => a + parseFloat(p.style.width), 0);
+      let x = (W - total) / 2;
+      ordre.forEach((p) => { p.style.left = x + "px"; p.style.top = "92px"; x += parseFloat(p.style.width); });
+      texte.textContent = "rangés par type, puis mis bout à bout";
+    } else if (n === 2) {
+      const g = groupes(), ecart = 26;
+      const total = g.flat().reduce((a, p) => a + parseFloat(p.style.width), 0) + ecart * 2;
+      let x = (W - total) / 2;
+      g.forEach((groupe) => {
+        const debut = x;
+        groupe.forEach((p) => { p.style.left = x + "px"; x += parseFloat(p.style.width); });
+        const b = document.createElement("div");
+        b.className = "bloc"; b.style.left = debut + "px"; b.style.width = x - debut + "px";
+        b.dataset.debut = debut; b.dataset.largeur = x - debut;
+        b.innerHTML = '<span class="cle">AES-256-GCM</span>';
+        scene.appendChild(b); blocs.push(b);
+        x += ecart;
+      });
+      texte.textContent = "découpés en blocs indépendants";
+    } else if (n === 3) {
+      blocs.forEach((b) => (b.style.opacity = 1));
+      pieces.forEach((p) => (p.style.opacity = 0));
+      requestAnimationFrame(() => blocs.forEach((b) => {
+        const l = parseFloat(b.dataset.largeur), c = l / RATIO;
+        b.style.width = c + "px"; b.style.left = parseFloat(b.dataset.debut) + (l - c) / 2 + "px";
+      }));
+      texte.textContent = "÷ " + nb(RATIO, 2) + " sur les sources de CPython (mesuré)";
+    } else if (n === 4) {
+      blocs.forEach((b) => b.classList.add("ferme"));
+      texte.textContent = "chaque bloc scellé : + 128 octets en tout";
+    }
+  }
+
+  construire();
+  if (calme) { afficher(0); afficher(1); afficher(2); afficher(3); afficher(4); }
+  else {
+    afficher(0);
+    let n = 0;
+    setInterval(() => { n = (n + 1) % 6; if (n === 5) return; if (n === 0) construire(); afficher(n); }, 2600);
+  }
+  addEventListener("resize", () => { construire(); afficher(0); });
+
+  /* Format interactif */
+  const parties = {
+    entete: ["L'en-tête — 80 octets, au début", [
+      ["0 – 5", "signature", "SAKU\\0\\0"], ["6", "version du format", "0"], ["7", "drapeaux", "bit 0 : archive chiffrée"],
+      ["8 – 15", "algorithmes et coût de la clé", "AES-256-GCM, Argon2id : passes, voies, mémoire"], ["16 – 31", "sel", "aléatoire, propre à l'archive"],
+      ["32 – 63", "empreinte du modèle", "SHA-256 du codec neuronal (zéros en v0)"], ["64 – 67", "taille de bloc", "8 Mio par défaut"], ["76 – 79", "CRC-32", "contrôle de l'en-tête"]]],
+    bloc: ["Un bloc de données — 16 octets d'en-tête, puis la charge", [
+      ["0", "type", "1 = données, 2 = index"], ["1", "codec", "0 stocké, 1 zstd, 2 réservé au neuronal"],
+      ["4 – 7", "taille en clair", "bornée par la taille de bloc"], ["8 – 11", "taille de la charge", "étiquette AES-GCM de 16 octets comprise"],
+      ["12 – 15", "CRC-32", "de la charge, pour détecter l'usure du disque"], ["16 –", "charge", "compressée, puis chiffrée si demandé"]]],
+    index: ["L'index — un bloc comme les autres, à la fin", [
+      ["blocs", "liste", "position, taille en clair et codec de chaque bloc"], ["fichiers", "liste", "chemin, taille, droits, date, SHA-256"],
+      ["contrôles", "à la lecture", "blocs contigus, chemins sûrs, sommes cohérentes"], ["chiffrement", "nonce dédié", "rôle 01 : jamais confondu avec un bloc de données"]]],
+    pied: ["Le pied — 16 octets, à la toute fin", [
+      ["0 – 7", "position de l'index", "le lecteur commence ici"], ["8 – 11", "signature", "UKAS"], ["12 – 15", "CRC-32", "contrôle du pied"]]],
+  };
+  const detail = document.getElementById("detail");
+  const boutons = [...document.querySelectorAll(".format button")];
+  function montrer(bouton) {
+    boutons.forEach((b) => b.setAttribute("aria-pressed", b === bouton));
+    const [titre, lignes] = parties[bouton.dataset.part];
+    detail.innerHTML = `<strong>${titre}</strong><div class="defile"><table><thead><tr><th>Octets</th><th>Champ</th><th style="text-align:left">Contenu</th></tr></thead><tbody>${lignes.map(([a, b, c]) => `<tr><td class="mono">${a}</td><td style="text-align:left">${b}</td><td style="text-align:left;white-space:normal">${c}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+  boutons.forEach((b) => b.addEventListener("click", () => montrer(b)));
+  montrer(boutons[0]);
+
+
+  /* ---------- Science ---------- */
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const el = (nom, attrs = {}, parent) => { const e = document.createElementNS(SVGNS, nom); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+
+  /* 1. Principe des tiroirs */
+  const pg = document.getElementById("pigeons"), pgSvg = pg.querySelector("svg"), pgN = document.getElementById("n-bits");
+  let pgMinuteurs = [];
+  function tiroirs() {
+    pgMinuteurs.forEach(clearTimeout); pgMinuteurs = [];
+    const n = +pgN.value; document.getElementById("n-val").textContent = n;
+    pgSvg.innerHTML = "";
+    const longs = [...Array(2 ** n)].map((_, i) => i.toString(2).padStart(n, "0"));
+    const courts = [""]; for (let l = 1; l < n; l++) for (let i = 0; i < 2 ** l; i++) courts.push(i.toString(2).padStart(l, "0"));
+    const pos = (k, total) => 20 + (600 * (k + 0.5)) / total;
+    const r = Math.max(3, Math.min(9, 260 / longs.length));
+    el("text", { x: 0, y: 11, "font-size": 11, fill: "#6b6b6b" }, pgSvg).textContent = `${longs.length} fichiers de ${n} bits`;
+    el("text", { x: 0, y: 196, "font-size": 11, fill: "#6b6b6b" }, pgSvg).textContent = `${courts.length} fichiers plus courts`;
+    const liens = longs.map((_, k) => k < courts.length ? el("line", { x1: pos(k, longs.length), y1: 52 + r, x2: pos(k, courts.length), y2: 158 - r, stroke: "#1a1a1a", "stroke-width": 1, opacity: 0 }, pgSvg) : null);
+    const ronds = longs.map((m, k) => { const c = el("circle", { cx: pos(k, longs.length), cy: 52, r, fill: "#fff", stroke: "#1a1a1a" }, pgSvg); if (n <= 3) el("text", { x: pos(k, longs.length), y: 47 - r, "text-anchor": "middle", "font-size": 10 }, pgSvg).textContent = m; return c; });
+    courts.forEach((m, k) => { el("circle", { cx: pos(k, courts.length), cy: 158, r, fill: "#f4f2ee", stroke: "#1a1a1a" }, pgSvg); if (n <= 3) el("text", { x: pos(k, courts.length), y: 158 + r + 12, "text-anchor": "middle", "font-size": 10 }, pgSvg).textContent = m === "" ? "∅" : m; });
+    const texte = document.getElementById("pigeons-texte");
+    texte.textContent = "";
+    const pas = calme ? 0 : Math.max(60, 1600 / longs.length);
+    longs.forEach((_, k) => pgMinuteurs.push(setTimeout(() => {
+      if (liens[k]) { liens[k].setAttribute("opacity", 0.55); ronds[k].setAttribute("fill", "#1a1a1a"); }
+      else { ronds[k].setAttribute("fill", "#8a3b12"); ronds[k].setAttribute("stroke", "#8a3b12"); texte.textContent = `Le fichier ${longs[k]} ne trouve aucune place plus courte : ${longs.length} fichiers pour ${courts.length} places.`; }
+    }, k * pas)));
+  }
+  pgN.addEventListener("input", tiroirs);
+  pg.addEventListener("vu", tiroirs);
+
+  /* 2. Coût de chaque caractère avec un modèle à contexte */
+  const exemple = `def compresser(blocs, niveau=19):
+    """Compresse chaque bloc et garde le plus petit résultat."""
+    resultats = []
+    for bloc in blocs:
+        compresse = zstd.compress(bloc, niveau)
+        if len(compresse) < len(bloc):
+            resultats.append((1, compresse))
+        else:
+            resultats.append((0, bloc))
+    return resultats
+
+
+def decompresser(resultats):
+    blocs = []
+    for codec, charge in resultats:
+        if codec == 1:
+            blocs.append(zstd.decompress(charge))
+        else:
+            blocs.append(charge)
+    return blocs
+`;
+  const chaleur = document.getElementById("chaleur");
+  let ordre = 2;
+  function couts(texteSource, k) {
+    // Mélange récursif des contextes 0..k, comptes appris au fil du texte (aucune connaissance préalable).
+    const tables = [...Array(k + 1)].map(() => new Map());
+    const res = [];
+    for (let i = 0; i < texteSource.length; i++) {
+      const c = texteSource[i];
+      let p = 1 / 256;
+      for (let o = 0; o <= k; o++) {
+        if (i < o) break;
+        const t = tables[o].get(texteSource.slice(i - o, i));
+        if (!t) continue;
+        const n = t.get(c) || 0;
+        p = (n + 0.5 * t.size * p) / (t.total + 0.5 * t.size);
+      }
+      res.push(-Math.log2(p));
+      for (let o = 0; o <= k && o <= i; o++) {
+        const ctx = texteSource.slice(i - o, i);
+        let t = tables[o].get(ctx);
+        if (!t) { t = new Map(); t.total = 0; tables[o].set(ctx, t); }
+        t.set(c, (t.get(c) || 0) + 1); t.total++;
+      }
+    }
+    return res;
+  }
+  const teinte = (b) => { const x = Math.min(1, b / 8); return `rgba(138,59,18,${(x * 0.85).toFixed(3)})`; };
+  let animChaleur;
+  function peindre(anime) {
+    const t = chaleur.textContent || exemple;
+    const c = couts(t, ordre);
+    const total = c.reduce((a, b) => a + b, 0);
+    document.getElementById("cout").textContent = nb(total / t.length, 2);
+    const curseurDansZone = document.activeElement === chaleur;
+    if (curseurDansZone) return; // on ne repeint pas pendant la saisie : le curseur sauterait
+    chaleur.innerHTML = "";
+    const spans = [...t].map((ch, i) => { const s = document.createElement("span"); s.textContent = ch; s.title = `${nb(c[i], 2)} bits`; chaleur.appendChild(s); return s; });
+    cancelAnimationFrame(animChaleur);
+    if (!anime || calme) { spans.forEach((s, i) => (s.style.backgroundColor = teinte(c[i]))); return; }
+    let i = 0;
+    const pas = () => { const fin = Math.min(spans.length, i + 12); for (; i < fin; i++) spans[i].style.backgroundColor = teinte(c[i]); if (i < spans.length) animChaleur = requestAnimationFrame(pas); };
+    pas();
+  }
+  chaleur.textContent = exemple;
+  document.querySelectorAll("#ordres button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("#ordres button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    ordre = +b.dataset.o; peindre(true);
+  }));
+  let saisie;
+  chaleur.addEventListener("input", () => { clearTimeout(saisie); saisie = setTimeout(() => peindre(false), 250); });
+  chaleur.addEventListener("blur", () => peindre(false));
+  document.getElementById("prediction").addEventListener("vu", () => peindre(true));
+  peindre(false);
+
+  /* 3. Codage arithmétique, intervalle par intervalle */
+  const FREQ = { " ": 17, e: 12.1, a: 6.4, s: 6.5, i: 6.2, t: 6, n: 6, r: 5.5, u: 5.2, l: 4.6, o: 4.6, d: 3.1, c: 2.8, p: 2.5, m: 2.4, "é": 1.6, v: 1.3, q: 1, f: 0.9, b: 0.8, g: 0.8, h: 0.7, j: 0.4, x: 0.3, y: 0.2, k: 0.1, w: 0.1, z: 0.1 };
+  const LETTRES = Object.keys(FREQ), SOMME = LETTRES.reduce((a, c) => a + FREQ[c], 0);
+  const svgA = document.getElementById("intervalles");
+  let animA = [];
+  function coder() {
+    animA.forEach(clearTimeout); animA = [];
+    const mot = [...document.getElementById("mot").value.toLowerCase()].filter((c) => c in FREQ);
+    svgA.innerHTML = "";
+    const H = 46, X0 = 128, L = 506;
+    svgA.setAttribute("viewBox", `0 0 640 ${Math.max(1, mot.length) * H + 30}`);
+    let bas = 0, larg = 1, bits = 0;
+    mot.forEach((ch, i) => {
+      const g = el("g", { class: "ligne" }, svgA), y = 10 + i * H;
+      el("text", { x: 0, y: y + 14, "font-size": 11 }, g).textContent = i === 0 ? "[0, 1)" : "zoom ×" + (1 / larg >= 1e6 ? (1 / larg).toExponential(1).replace("e+", "e") : nb(1 / larg, 0));
+      let cumul = 0, choisi;
+      for (const c of LETTRES) {
+        const w = (FREQ[c] / SOMME) * L, x = X0 + (cumul / SOMME) * L;
+        const r = el("rect", { x, y, width: Math.max(w, .5), height: 20, fill: c === ch ? "#8a3b12" : "#fff", stroke: "#1a1a1a", "stroke-width": .5 }, g);
+        if (w > 11) el("text", { x: x + w / 2, y: y + 14, "text-anchor": "middle", fill: c === ch ? "#fff" : "#1a1a1a" }, g).textContent = c === " " ? "␣" : c;
+        if (c === ch) choisi = { x, w, debut: cumul };
+        cumul += FREQ[c];
+      }
+      const p = FREQ[ch] / SOMME;
+      bas += larg * (choisi.debut / SOMME); larg *= p; bits += -Math.log2(p);
+      el("text", { x: 0, y: y + 29, fill: "#6b6b6b" }, g).textContent = `${ch === " " ? "␣" : ch} : ${nb(p * 100, 1)} % → ${nb(-Math.log2(p), 2)} bits`;
+      if (i < mot.length - 1) {
+        el("path", { d: `M${choisi.x} ${y + 20} L${X0} ${y + H} M${choisi.x + choisi.w} ${y + 20} L${X0 + L} ${y + H}`, stroke: "#8a3b12", "stroke-width": .8, fill: "none", "stroke-dasharray": "2 2" }, g);
+      }
+      animA.push(setTimeout(() => g.classList.add("vue"), calme ? 0 : 150 + i * 750));
+    });
+    document.getElementById("largeur").textContent = mot.length ? larg.toExponential(3).replace(".", ",").replace("e", " × 10^") : "–";
+    document.getElementById("bits-arith").textContent = mot.length ? Math.ceil(bits) + 1 : "–";
+    document.getElementById("bits-brut").textContent = mot.length ? `contre ${mot.length * 8} bits en écriture brute (8 bits par caractère)` : "lettres minuscules et espaces uniquement";
+  }
+  document.getElementById("mot").addEventListener("input", coder);
+  document.getElementById("rejouer").addEventListener("click", coder);
+  document.getElementById("arith").addEventListener("vu", coder);
+
+  /* 4. Déterminisme : flottants, puis vrai codeur arithmétique entier */
+  const f1 = (0.1 + 0.2) + 0.3, f2 = 0.1 + (0.2 + 0.3);
+  document.getElementById("flottants").innerHTML =
+    `(0,1 + 0,2) + 0,3 = ${String(f1).replace(".", ",")}<br>0,1 + (0,2 + 0,3) = ${String(f2).replace(".", ",")}<br>` +
+    `<span style="color:var(--accent)">${f1 === f2 ? "identiques ici, mais pas en général" : "deux résultats différents pour la même somme"}</span>`;
+
+  const MESSAGE = "Saku compresse puis chiffre, et le décodeur doit refaire exactement les mêmes calculs que l'encodeur.";
+  function tableFrequences(texteSource) {
+    const alph = [...new Set(texteSource)].sort();
+    const compte = alph.map((c) => [...texteSource].filter((x) => x === c).length);
+    const T = 65536, brut = compte.reduce((a, b) => a + b, 0);
+    const f = compte.map((n) => Math.max(1, Math.floor((n * T) / brut)));
+    f[f.indexOf(Math.max(...f))] += T - f.reduce((a, b) => a + b, 0);
+    return { alph, f, T };
+  }
+  const BITS = 32, PLEIN = 2 ** BITS - 1, MOITIE = 2 ** 31, QUART = 2 ** 30;
+  function cumuls(f) { const c = [0]; f.forEach((x) => c.push(c[c.length - 1] + x)); return c; }
+  function encoder(texteSource, m) {
+    const cum = cumuls(m.f), sortie = [];
+    let bas = 0, haut = PLEIN, attente = 0;
+    const emettre = (b) => { sortie.push(b); for (; attente > 0; attente--) sortie.push(1 - b); };
+    for (const ch of texteSource) {
+      const s = m.alph.indexOf(ch), etendue = haut - bas + 1;
+      haut = bas + Math.floor((etendue * cum[s + 1]) / m.T) - 1;
+      bas = bas + Math.floor((etendue * cum[s]) / m.T);
+      for (;;) {
+        if (haut < MOITIE) emettre(0);
+        else if (bas >= MOITIE) { emettre(1); bas -= MOITIE; haut -= MOITIE; }
+        else if (bas >= QUART && haut < 3 * QUART) { attente++; bas -= QUART; haut -= QUART; }
+        else break;
+        bas *= 2; haut = haut * 2 + 1;
+      }
+    }
+    attente++; emettre(bas < QUART ? 0 : 1);
+    return sortie;
+  }
+  function decoder(bits, n, m) {
+    const cum = cumuls(m.f);
+    let bas = 0, haut = PLEIN, valeur = 0, k = 0;
+    const lire = () => (k < bits.length ? bits[k++] : 0);
+    for (let i = 0; i < BITS; i++) valeur = valeur * 2 + lire();
+    let res = "";
+    for (let i = 0; i < n; i++) {
+      const etendue = haut - bas + 1;
+      const echelle = Math.floor(((valeur - bas + 1) * m.T - 1) / etendue);
+      let s = 0; while (s < m.alph.length - 1 && cum[s + 1] <= echelle) s++;
+      res += m.alph[s];
+      haut = bas + Math.floor((etendue * cum[s + 1]) / m.T) - 1;
+      bas = bas + Math.floor((etendue * cum[s]) / m.T);
+      for (;;) {
+        if (haut < MOITIE) {}
+        else if (bas >= MOITIE) { bas -= MOITIE; haut -= MOITIE; valeur -= MOITIE; }
+        else if (bas >= QUART && haut < 3 * QUART) { bas -= QUART; haut -= QUART; valeur -= QUART; }
+        else break;
+        bas *= 2; haut = haut * 2 + 1; valeur = valeur * 2 + lire();
+      }
+    }
+    return res;
+  }
+  const modele = tableFrequences(MESSAGE);
+  const bitsMsg = encoder(MESSAGE, modele);
+  const decale = { ...modele, f: modele.f.slice() };
+  { const a = modele.alph.indexOf("e"), b = modele.alph.indexOf("t"); decale.f[a] += 1; decale.f[b] -= 1; }
+  document.getElementById("poids").textContent = `message de ${MESSAGE.length} caractères encodé en ${bitsMsg.length} bits, contre ${MESSAGE.length * 8} bruts`;
+  let animD;
+  function montrerDecodage(mode) {
+    clearInterval(animD);
+    const sortie = decoder(bitsMsg, MESSAGE.length, mode ? decale : modele);
+    let premier = [...sortie].findIndex((c, i) => c !== MESSAGE[i]);
+    const zoneD = document.getElementById("decode"), texteD = document.getElementById("decode-texte");
+    const rendu = (n) => { zoneD.innerHTML = [...sortie.slice(0, n)].map((c, i) => `<span${premier >= 0 && i >= premier ? ' class="faux"' : ""}>${echapper(c)}</span>`).join(""); };
+    const fin = () => { texteD.textContent = premier < 0 ? "Décodé à l'identique." : `Identique sur ${premier} caractères, puis tout diverge : le décodeur a pris une autre branche et n'a aucun moyen de revenir.`; };
+    if (calme) { rendu(sortie.length); fin(); return; }
+    let n = 0; texteD.textContent = "";
+    animD = setInterval(() => { n += 2; rendu(n); if (n >= sortie.length) { clearInterval(animD); fin(); } }, 28);
+  }
+  document.querySelectorAll("#decodeurs button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("#decodeurs button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    montrerDecodage(+b.dataset.d);
+  }));
+  document.getElementById("determinisme").addEventListener("vu", () => montrerDecodage(0));
+
+  /* Démonstration AES-256-GCM */
+  const zone = document.getElementById("octets"), verdict = document.getElementById("verdict"), clair = document.getElementById("clair");
+  let cle, nonce, original = new Uint8Array(), courant = new Uint8Array(), touches = new Set();
+  async function chiffrer() {
+    if (!crypto.subtle) { verdict.textContent = "Ce navigateur n'expose pas WebCrypto (page servie hors HTTPS ?)."; return; }
+    cle ??= await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    nonce = crypto.getRandomValues(new Uint8Array(12));
+    const donnees = new TextEncoder().encode(clair.value.slice(0, 160));
+    original = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cle, donnees));
+    courant = original.slice(); touches.clear(); dessiner(); await dechiffrer();
+  }
+  function dessiner() {
+    zone.innerHTML = "";
+    courant.forEach((o, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = o.toString(16).padStart(2, "0");
+      if (i >= courant.length - 16) b.classList.add("etiquette");
+      if (touches.has(i)) b.classList.add("touche");
+      b.title = i >= courant.length - 16 ? "octet de l'étiquette" : "octet chiffré n° " + i;
+      b.addEventListener("click", () => { courant[i] ^= 1 << Math.floor(Math.random() * 8); courant[i] === original[i] ? touches.delete(i) : touches.add(i); dessiner(); dechiffrer(); });
+      zone.appendChild(b);
+    });
+  }
+  async function dechiffrer() {
+    try {
+      const r = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, cle, courant);
+      verdict.className = "verdict sans ok";
+      verdict.textContent = "Déchiffré et authentifié : « " + new TextDecoder().decode(r).replace(/\s+/g, " ").slice(0, 70) + " »";
+    } catch {
+      verdict.className = "verdict sans ko";
+      verdict.textContent = "Refusé : l'étiquette d'authentification ne correspond plus. Aucun octet du texte n'est rendu.";
+      if (!calme) { zone.classList.remove("secoue"); void zone.offsetWidth; zone.classList.add("secoue"); }
+    }
+  }
+  let attente;
+  clair.addEventListener("input", () => { clearTimeout(attente); attente = setTimeout(chiffrer, 300); });
+  document.getElementById("retablir").addEventListener("click", () => { courant = original.slice(); touches.clear(); dessiner(); dechiffrer(); });
+  chiffrer();
+
+  /* Graphiques des mesures, depuis les données vérifiées du banc */
+  const source = document.getElementById("donnees");
+  const graphes = document.getElementById("graphes");
+  if (source) {
+    const resultats = JSON.parse(source.textContent).filter((r) => r.statut === "vérifié");
+    const corpus = [...new Set(resultats.map((r) => r.corpus))];
+    const max = Math.max(...resultats.map((r) => r.bits_par_octet)) * 1.08;
+    for (const c of corpus) {
+      const lignes = resultats.filter((r) => r.corpus === c).sort((a, b) => a.bits_par_octet - b.bits_par_octet);
+      const bloc = document.createElement("div");
+      bloc.className = "graphe sans";
+      bloc.innerHTML = `<div class="titre">${c} — ${nb(lignes[0].fichiers, 0)} fichiers, ${nb(lignes[0].octets_bruts / 1e6, 1)} Mo</div>` +
+        lignes.map((r) => `<div class="barre${r.outil.startsWith("saku") ? " saku" : ""}"><span class="nom">${r.outil}</span><span class="piste"><span class="rempli" data-l="${(100 * r.bits_par_octet / max).toFixed(2)}"></span></span><span class="val">${nb(r.bits_par_octet, 3)}</span></div>`).join("") +
+        `<div class="axe">bits par octet d'origine</div>`;
+      graphes.appendChild(bloc);
+    }
+    const remplir = () => graphes.querySelectorAll(".rempli").forEach((e, i) => setTimeout(() => (e.style.width = e.dataset.l + "%"), calme ? 0 : i * 90));
+    document.getElementById("mesures").addEventListener("vu", remplir);
+    if (document.getElementById("mesures").classList.contains("vu")) remplir();
+  }
+
+  /* Terminal */
+  const term = document.getElementById("terminal");
+  const session = [
+    ["$ ", "git clone https://github.com/Dimitri-Rey/SAKU.git && cd SAKU && uv sync"],
+    ["", "Installed 6 packages in 105ms"],
+    ["$ ", "uv run saku creer --chiffrer projet.saku mon-projet/"],
+    ["", "Mot de passe: \nConfirmation: "],
+    ["$ ", "uv run saku lister projet.saku"],
+    ["", "Mot de passe: \n          13  mon-projet/README.md\n          17  mon-projet/src/main.py"],
+    ["$ ", "uv run saku extraire projet.saku -C sortie/ mon-projet/src/main.py"],
+    ["", "Mot de passe: "],
+  ];
+  function ecrireTout() { term.innerHTML = session.map(([i, t]) => i ? `<span class="invite">${i}</span>${echapper(t)}` : `<span class="com">${echapper(t)}</span>`).join("\n") + '\n<span class="invite">$ </span><span class="curseur"></span>'; }
+  if (calme) ecrireTout();
+  else {
+    let lance = false;
+    document.getElementById("installer").addEventListener("vu", async () => {
+      if (lance) return; lance = true;
+      let html = "";
+      const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (const [invite, ligne] of session) {
+        if (invite) {
+          html += `<span class="invite">${invite}</span>`;
+          for (let k = 1; k <= ligne.length; k++) { term.innerHTML = html + echapper(ligne.slice(0, k)) + '<span class="curseur"></span>'; await pause(18 + Math.random() * 30); }
+          html += echapper(ligne) + "\n"; await pause(350);
+        } else { html += `<span class="com">${echapper(ligne)}</span>\n`; term.innerHTML = html; await pause(500); }
+      }
+      term.innerHTML = html + '<span class="invite">$ </span><span class="curseur"></span>';
+    });
+  }
+})();
+</script>
+</body>
+</html>
