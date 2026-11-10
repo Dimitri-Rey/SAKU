@@ -208,7 +208,7 @@
 
 <div class="col">
 <section class="revele">
-  <p class="note">Version 0.1.0, prototype. Le codec neuronal n'est pas encore écrit : aujourd'hui Saku compresse avec zstd, et ne fait donc <strong>pas mieux que zstd</strong>. Les mesures plus bas le montrent sans détour. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
+  <p class="note">Prototype. Le <strong>codec 2</strong>, un mélange de contextes calculé uniquement en nombres entiers, sans modèle externe, bat <span class="mono">xz -9</span> de 5,1 % sur un corpus de code applicatif et reste à 0,9 % derrière sur les sources de CPython, à environ 0,75 Mo/s. Le réseau de neurones pré-entraîné n'est pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
   <h3>Ce que Saku ne promettra jamais</h3>
   <ul class="net">
     <li><strong>Un ratio universel.</strong> Réduire n'importe quel gigaoctet à un mégaoctet est impossible : il n'existe pas assez de petits fichiers pour représenter tous les gros. Des données déjà compressées ou aléatoires ne rétrécissent pas.</li>
@@ -224,7 +224,7 @@
     <li><div><strong>Collecte.</strong> Les dossiers sont parcourus sans suivre les liens symboliques. Chaque fichier reçoit une empreinte SHA-256, qui servira à contrôler l'extraction.</div></li>
     <li><div><strong>Routage.</strong> Les fichiers sont classés en texte ou en binaire, puis rangés par extension et par chemin. Les contenus qui se ressemblent deviennent voisins, ce qui aide le compresseur.</div></li>
     <li><div><strong>Découpage.</strong> Le tout forme un seul flux, coupé en blocs indépendants de 8 Mio. Un bloc ne mélange jamais texte et binaire, et chacun se lit seul : c'est ce qui permet d'extraire un fichier sans tout décompresser.</div></li>
-    <li><div><strong>Compression.</strong> Chaque bloc passe par zstd au niveau 19, ou reste tel quel si la compression ne gagne rien. Le codec neuronal prendra cette place.</div></li>
+    <li><div><strong>Compression.</strong> Chaque bloc passe par zstd au niveau 19, ou, sur demande, par le codec 2 : un prédicteur qui apprend le bloc en le lisant et un codeur arithmétique, tout en nombres entiers. Un bloc que la compression ne réduit pas reste tel quel.</div></li>
     <li><div><strong>Chiffrement</strong>, si vous le demandez. Chaque bloc compressé est scellé par AES-256-GCM. D'abord compresser, ensuite chiffrer : des données chiffrées ne se compressent plus.</div></li>
     <li><div><strong>Index.</strong> La liste des fichiers et des blocs est écrite à la fin, compressée et chiffrée elle aussi.</div></li>
   </ol>
@@ -316,9 +316,11 @@
   <p class="sans" style="font-size:.78rem;color:var(--gris)">Bits par octet d'origine : plus la barre est courte, mieux c'est. 8 bits par octet, c'est l'absence de compression.</p>
   <h3>Ce que disent ces chiffres</h3>
   <ul class="net">
-    <li><strong>Saku ne bat pas zstd aujourd'hui.</strong> Sur les corpus entiers, son archive est plus grosse de 1,7 à 3 % que celle de <span class="mono">zstd -19</span>, et de 5 à 6,4 % que celle de <span class="mono">xz -9</span>. C'est attendu : il utilise zstd par blocs séparés, et son index porte une empreinte par fichier.</li>
+    <li><strong>Le codec 2 (<span class="mono">saku-cm</span>) bat tout le monde sur le code applicatif</strong> : 5,1 % de moins que <span class="mono">xz -9</span>, 6,9 % de moins que <span class="mono">zstd -19</span>.</li>
+    <li><strong>Sur CPython, il reste 0,9 % derrière xz.</strong> Cet écart, c'est l'index de Saku : 219 777 octets, dont 161 440 d'empreintes SHA-256, une par fichier, incompressibles par nature. Les données seules tiennent en moins que l'archive xz.</li>
+    <li><strong>Le prix, c'est la vitesse</strong> : environ 0,75 Mo/s dans les deux sens. Le réglage par défaut reste donc zstd, qui ne fait pas mieux que zstd lui-même : même moteur, plus l'index.</li>
     <li><strong>Chiffrer ne coûte presque rien en taille</strong> : 51 et 128 octets de plus sur les deux corpus.</li>
-    <li><strong>L'extraction est lente</strong>, 25 à 45 Mo/s : Saku écrit et contrôle chaque fichier, là où les autres ne restituent qu'un tar, et le prototype est en Python.</li>
+
   </ul>
   <details>
     <summary>Tous les chiffres : vitesse, mémoire, ratio modèle compris</summary>
@@ -330,6 +332,7 @@
 <tr><td>xz-9</td><td>1 753 708</td><td>1,175</td><td>6,81</td><td>6,81</td><td>2,8</td><td>125,9</td><td>174</td><td>26</td></tr>
 <tr class="saku"><td>saku</td><td>1 841 226</td><td>1,234</td><td>6,48</td><td>6,48</td><td>3,1</td><td>25,3</td><td>132</td><td>54</td></tr>
 <tr class="saku"><td>saku-chiffre</td><td>1 841 277</td><td>1,234</td><td>6,48</td><td>6,48</td><td>2,7</td><td>11,2</td><td>284</td><td>284</td></tr>
+<tr class="saku"><td>saku-cm</td><td>1 664 426</td><td>1,115</td><td>7,17</td><td>7,17</td><td>0,729</td><td>0,703</td><td>136</td><td>126</td></tr>
 </tbody></table></div>
 <div class="defile"><table><caption>cpython — 5 045 fichiers, 112 691 061 octets</caption>
 <thead><tr><th>Outil</th><th>Archive (octets)</th><th>bits/octet</th><th>Ratio</th><th>Ratio, modèle compris</th><th>Compression (Mo/s)</th><th>Décompression (Mo/s)</th><th>Mémoire compr. (Mio)</th><th>Mémoire décompr. (Mio)</th></tr></thead><tbody>
@@ -338,6 +341,7 @@
 <tr><td>xz-9</td><td>22 909 784</td><td>1,626</td><td>4,92</td><td>4,92</td><td>2,1</td><td>101,9</td><td>674</td><td>67</td></tr>
 <tr class="saku"><td>saku</td><td>24 384 040</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,5</td><td>45,1</td><td>147</td><td>73</td></tr>
 <tr class="saku"><td>saku-chiffre</td><td>24 384 168</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,6</td><td>35,9</td><td>284</td><td>284</td></tr>
+<tr class="saku"><td>saku-cm</td><td>23 107 271</td><td>1,640</td><td>4,88</td><td>4,88</td><td>0,771</td><td>0,765</td><td>150</td><td>146</td></tr>
 </tbody></table></div>
 <!--/MESURES-->
   </details>
@@ -352,6 +356,7 @@
     <dt>Python 3.14 ou plus récent</dt><dd>Saku utilise le module zstd entré dans la bibliothèque standard avec cette version.</dd>
     <dt>uv</dt><dd>Pour installer l'environnement et la seule dépendance, <span class="mono">cryptography</span> : <a href="https://docs.astral.sh/uv/">docs.astral.sh/uv</a>.</dd>
     <dt>De la mémoire</dt><dd>Environ 150 Mio pour créer une archive, près de 300 Mio si elle est chiffrée : la dérivation de clé en réserve 256 à elle seule.</dd>
+    <dt>Un compilateur C, de préférence</dt><dd>Pour le codec 2, compilé tout seul à la première utilisation. Sans compilateur, une version Python donne le même résultat, beaucoup plus lentement.</dd>
     <dt>Pas de carte graphique</dt><dd>Rien dans la version actuelle n'en a besoin.</dd>
   </dl>
   <h3>En quatre commandes</h3>
@@ -362,9 +367,9 @@
 <hr>
 <section id="suite" class="revele">
   <h2><span class="num">06</span>La suite : le codec neuronal</h2>
-  <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre.</p>
+  <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre, en commençant par un prédicteur simple et entièrement entier, le codec 2, avant le réseau de neurones.</p>
   <div class="verrous">
-    <div><span class="etat">EN COURS</span><b>Reproductibilité</b>Le décodeur doit recalculer exactement les mêmes probabilités. En virgule flottante, un processeur différent suffit à rendre l'archive illisible. Le codec de Saku calculera en nombres entiers.</div>
+    <div><span class="etat">PREUVE EN COURS</span><b>Reproductibilité</b>Le codec 2 calcule tout en entiers. Deux implémentations écrites séparément, en Python et en C, produisent les mêmes octets, quel que soit le niveau d'optimisation du compilateur. Reste à le prouver sur ARM64.</div>
     <div><span class="etat">ENSUITE</span><b>Taille du modèle</b>Le modèle fait partie du décodeur et compte dans le ratio. Un modèle de 170 Mo ne se rembourse que sur de très grosses archives.</div>
     <div><span class="etat">ENSUITE</span><b>Vitesse</b>Ces compresseurs avancent en kilooctets par seconde sur un processeur. Un archiveur du quotidien ne peut pas être aussi lent.</div>
   </div>
@@ -374,8 +379,10 @@
     <li class="fait">Format v0, conteneur, chiffrement authentifié</li>
     <li class="fait">Lecteur durci, tests d'archives hostiles</li>
     <li class="fait">Banc de mesure vérifié contre zstd, xz, cmix et ts_zip</li>
-    <li>Codec neuronal sans perte en arithmétique entière</li>
-    <li>Reproductibilité prouvée entre machines (x86-64, ARM64)</li>
+    <li class="fait">Codec 2 : mélange de contextes en entiers, Python et C identiques octet pour octet</li>
+    <li>Reproductibilité prouvée sur ARM64</li>
+    <li>Codec 2 v2, plus compact et plus rapide</li>
+    <li>Réseau de neurones pré-entraîné, en arithmétique entière</li>
     <li>Conteneurs déjà compressés (.docx, .zip, JPEG) reconstruits à l'identique</li>
     <li>Correction d'erreurs, clé enveloppée, ajout de fichiers</li>
     <li>Mode avec perte pour les médias, uniquement sur demande explicite</li>
@@ -390,7 +397,7 @@
 </footer>
 
 <!--DONNEES-->
-<script type="application/json" id="donnees">[{"corpus": "code-perso", "outil": "zstd-19", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1787014, "octets_modele": 0, "bits_par_octet": 1.1975, "ratio": 6.68, "ratio_modele_compris": 6.6805, "compression_mo_s": 3.1709, "decompression_mo_s": 375.6479, "ram_compression_mio": 98, "ram_decompression_mio": 24, "fichiers": 709}, {"corpus": "code-perso", "outil": "zstd-22-long", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1783228, "octets_modele": 0, "bits_par_octet": 1.195, "ratio": 6.695, "ratio_modele_compris": 6.6947, "compression_mo_s": 1.8055, "decompression_mo_s": 378.6236, "ram_compression_mio": 282, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "xz-9", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1753708, "octets_modele": 0, "bits_par_octet": 1.1752, "ratio": 6.807, "ratio_modele_compris": 6.8074, "compression_mo_s": 2.7862, "decompression_mo_s": 125.9484, "ram_compression_mio": 174, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841226, "octets_modele": 0, "bits_par_octet": 1.2338, "ratio": 6.484, "ratio_modele_compris": 6.4838, "compression_mo_s": 3.1189, "decompression_mo_s": 25.341, "ram_compression_mio": 132, "ram_decompression_mio": 54, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku-chiffre", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841277, "octets_modele": 0, "bits_par_octet": 1.2339, "ratio": 6.484, "ratio_modele_compris": 6.4836, "compression_mo_s": 2.7377, "decompression_mo_s": 11.1654, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 709}, {"corpus": "cpython", "outil": "zstd-19", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23971699, "octets_modele": 0, "bits_par_octet": 1.7018, "ratio": 4.701, "ratio_modele_compris": 4.701, "compression_mo_s": 2.1437, "decompression_mo_s": 649.6566, "ram_compression_mio": 206, "ram_decompression_mio": 40, "fichiers": 5045}, {"corpus": "cpython", "outil": "zstd-22-long", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23200760, "octets_modele": 0, "bits_par_octet": 1.647, "ratio": 4.857, "ratio_modele_compris": 4.8572, "compression_mo_s": 1.4398, "decompression_mo_s": 425.2976, "ram_compression_mio": 846, "ram_decompression_mio": 115, "fichiers": 5045}, {"corpus": "cpython", "outil": "xz-9", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 22909784, "octets_modele": 0, "bits_par_octet": 1.6264, "ratio": 4.919, "ratio_modele_compris": 4.9189, "compression_mo_s": 2.0737, "decompression_mo_s": 101.8836, "ram_compression_mio": 674, "ram_decompression_mio": 67, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384040, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.622, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.525, "decompression_mo_s": 45.0901, "ram_compression_mio": 147, "ram_decompression_mio": 73, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku-chiffre", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384168, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.621, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.6146, "decompression_mo_s": 35.901, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 5045}]</script>
+<script type="application/json" id="donnees">[{"corpus": "code-perso", "outil": "zstd-19", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1787014, "octets_modele": 0, "bits_par_octet": 1.1975, "ratio": 6.68, "ratio_modele_compris": 6.6805, "compression_mo_s": 3.1709, "decompression_mo_s": 375.6479, "ram_compression_mio": 98, "ram_decompression_mio": 24, "fichiers": 709}, {"corpus": "code-perso", "outil": "zstd-22-long", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1783228, "octets_modele": 0, "bits_par_octet": 1.195, "ratio": 6.695, "ratio_modele_compris": 6.6947, "compression_mo_s": 1.8055, "decompression_mo_s": 378.6236, "ram_compression_mio": 282, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "xz-9", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1753708, "octets_modele": 0, "bits_par_octet": 1.1752, "ratio": 6.807, "ratio_modele_compris": 6.8074, "compression_mo_s": 2.7862, "decompression_mo_s": 125.9484, "ram_compression_mio": 174, "ram_decompression_mio": 26, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841226, "octets_modele": 0, "bits_par_octet": 1.2338, "ratio": 6.484, "ratio_modele_compris": 6.4838, "compression_mo_s": 3.1189, "decompression_mo_s": 25.341, "ram_compression_mio": 132, "ram_decompression_mio": 54, "fichiers": 709}, {"corpus": "code-perso", "outil": "saku-chiffre", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1841277, "octets_modele": 0, "bits_par_octet": 1.2339, "ratio": 6.484, "ratio_modele_compris": 6.4836, "compression_mo_s": 2.7377, "decompression_mo_s": 11.1654, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 709}, {"corpus": "cpython", "outil": "zstd-19", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23971699, "octets_modele": 0, "bits_par_octet": 1.7018, "ratio": 4.701, "ratio_modele_compris": 4.701, "compression_mo_s": 2.1437, "decompression_mo_s": 649.6566, "ram_compression_mio": 206, "ram_decompression_mio": 40, "fichiers": 5045}, {"corpus": "cpython", "outil": "zstd-22-long", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23200760, "octets_modele": 0, "bits_par_octet": 1.647, "ratio": 4.857, "ratio_modele_compris": 4.8572, "compression_mo_s": 1.4398, "decompression_mo_s": 425.2976, "ram_compression_mio": 846, "ram_decompression_mio": 115, "fichiers": 5045}, {"corpus": "cpython", "outil": "xz-9", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 22909784, "octets_modele": 0, "bits_par_octet": 1.6264, "ratio": 4.919, "ratio_modele_compris": 4.9189, "compression_mo_s": 2.0737, "decompression_mo_s": 101.8836, "ram_compression_mio": 674, "ram_decompression_mio": 67, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384040, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.622, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.525, "decompression_mo_s": 45.0901, "ram_compression_mio": 147, "ram_decompression_mio": 73, "fichiers": 5045}, {"corpus": "cpython", "outil": "saku-chiffre", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 24384168, "octets_modele": 0, "bits_par_octet": 1.731, "ratio": 4.621, "ratio_modele_compris": 4.6215, "compression_mo_s": 2.6146, "decompression_mo_s": 35.901, "ram_compression_mio": 284, "ram_decompression_mio": 284, "fichiers": 5045}, {"corpus": "code-perso", "outil": "saku-cm", "octets_bruts": 11938143, "statut": "vérifié", "octets_archive": 1664426, "octets_modele": 0, "bits_par_octet": 1.1154, "ratio": 7.173, "ratio_modele_compris": 7.1725, "compression_mo_s": 0.7291, "decompression_mo_s": 0.703, "ram_compression_mio": 136, "ram_decompression_mio": 126, "fichiers": 709}, {"corpus": "cpython", "outil": "saku-cm", "octets_bruts": 112691061, "statut": "vérifié", "octets_archive": 23107271, "octets_modele": 0, "bits_par_octet": 1.6404, "ratio": 4.877, "ratio_modele_compris": 4.8769, "compression_mo_s": 0.7706, "decompression_mo_s": 0.765, "ram_compression_mio": 150, "ram_decompression_mio": 146, "fichiers": 5045}]</script>
 <!--/DONNEES-->
 
 <script>

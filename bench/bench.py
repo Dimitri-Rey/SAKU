@@ -75,6 +75,12 @@ OUTILS = [
         environnement=(("SAKU_MOT_DE_PASSE", "banc de mesure"),),
     ),
     Outil(
+        "saku-cm",
+        (*SAKU, "creer", "--codec", "cm", "{archive}", "{entree}"),
+        (*SAKU, "extraire", "{archive}", "-C", "{sortie}"),
+        entree="dossier",
+    ),
+    Outil(
         "cmix",
         (str(CMIX), "-c", "{entree}", "{archive}"),
         (str(CMIX), "-d", "{archive}", "{sortie}"),

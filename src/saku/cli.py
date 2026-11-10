@@ -43,7 +43,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_creer.add_argument("archive", type=Path)
     p_creer.add_argument("sources", nargs="+", type=Path)
     p_creer.add_argument("--chiffrer", action="store_true", help="demande un mot de passe")
-    p_creer.add_argument("--niveau", type=int, default=19)
+    p_creer.add_argument("--niveau", type=int, default=19, help="niveau zstd")
+    p_creer.add_argument(
+        "--codec",
+        choices=["zstd", "cm"],
+        default="zstd",
+        help="zstd (rapide) ou cm : codec 2, plus compact, bien plus lent",
+    )
 
     p_extraire = sous.add_parser("extraire", help="Extraire une archive")
     p_extraire.add_argument("archive", type=Path)
@@ -68,6 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.sources,
                 mot_de_passe=mot_de_passe,
                 niveau=args.niveau,
+                codec=args.codec,
             )
         elif args.commande == "extraire":
             with _ouvrir_archive(args.archive) as archive:

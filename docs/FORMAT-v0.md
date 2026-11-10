@@ -42,7 +42,7 @@ En-tête de bloc (16 octets) suivi de la charge :
 | Décalage | Taille | Champ | Valeur |
 | --- | --- | --- | --- |
 | 0 | 1 | `type` | `1` données, `2` index |
-| 1 | 1 | `id_codec` | `0` stocké, `1` zstd, `2` réservé (codec neuronal entier, à venir) |
+| 1 | 1 | `id_codec` | `0` stocké, `1` zstd, `2` mélange de contextes en entiers v1 ([CODEC-2.md](CODEC-2.md)) |
 | 2 | 2 | réservé | zéros |
 | 4 | 4 | `taille_claire` | taille après déchiffrement et décompression, ≤ `taille_bloc` pour les données |
 | 8 | 4 | `taille_charge` | taille de la charge sur disque (étiquette AEAD de 16 o incluse si chiffré) |
@@ -107,8 +107,9 @@ Clair du bloc d'index = JSON UTF-8 :
 2. Ordre du flux : tous les `texte` puis tous les `autre` ; dans chaque groupe, tri par
    (extension en minuscules, chemin). Les fichiers semblables se suivent, la compression en profite.
 3. Un bloc ne mélange jamais les deux groupes (coupure forcée au changement de groupe).
-4. Codec en v0 : zstd niveau 19 pour les deux groupes. Le groupe `texte` basculera sur le codec
-   neuronal entier (`id_codec` 2) quand il existera ; le format n'aura pas à changer.
+4. Codec : zstd niveau 19 par défaut, ou codec 2 sur demande (`--codec cm`), pour tous les
+   blocs. Un bloc que le codec ne réduit pas est stocké (`id_codec` 0). Un futur codec neuronal
+   à modèle pré-entraîné prendra un nouvel identifiant ; le format n'aura pas à changer.
 
 ## 8. Obligations du lecteur
 

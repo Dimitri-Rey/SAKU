@@ -16,6 +16,11 @@ tout le reste du bloc est perdu.
 **Test.** La même archive, créée sur une machine, est décodée à l'identique sur au moins trois
 environnements différents (x86-64 avec et sans AVX-512, ARM64), avec 1 fil et avec N fils.
 
+**Où on en est (2026-11-11).** Le codec 2 (mélange de contextes, sans réseau pré-entraîné)
+est entièrement en entiers ; ses deux implémentations, Python et C, produisent les mêmes
+octets, et la sortie C ne change pas entre `-O0`, `-O2` et `-O3 -march=native`. Le test sur
+ARM64 reste à faire.
+
 **Seuil d'abandon.** Si l'inférence en arithmétique entière coûte plus de la moitié du gain de
 compression obtenu en flottant, ou si elle est plus de dix fois plus lente, le codec 2 tel
 qu'il est prévu ne tient pas.
@@ -63,8 +68,12 @@ comportement par défaut.
 **Risque.** Aujourd'hui Saku fait ce que font déjà `tar | zstd | age`, 7-Zip, restic ou borg,
 en moins bien rodé. La seule nouveauté prévue est le codec 2.
 
-**Test.** Sur les corpus de code, le codec 2 doit battre `xz -9` et `zstd -22 --long`, modèle
-compris, à un débit acceptable.
+**Test.** Sur les corpus de code, le codec de Saku doit battre `xz -9` et `zstd -22 --long`,
+modèle compris, à un débit acceptable.
+
+**Où on en est (2026-11-11).** Le codec 2 bat `xz -9` de 5,1 % sur le code applicatif et
+reste 0,9 % derrière sur CPython, à cause de l'index ; il bat `zstd -22 --long` sur les deux.
+Débit : 0,75 Mo/s, encore trop lent pour un usage quotidien.
 
 **Seuil d'abandon.** Si ce n'est pas le cas, le projet s'arrête ou change d'objet. Le
 conteneur seul ne justifie pas un nouveau format.

@@ -7,10 +7,26 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions :
 
 ### Ajouté
 
+- **Codec 2** (`--codec cm`) : mélange de contextes en arithmétique entière, spécifié dans
+  `docs/CODEC-2.md`. Référence en Python (`saku.cm_reference`) et version C99
+  (`src/saku/_cm/cm.c`, compilée à la première utilisation) qui produisent les mêmes octets ;
+  vecteurs de contrôle dans `tests/test_cm.py`. ADR 0002.
+- Option `--codec` de `saku creer` et paramètre `codec` de `creer_archive`.
+- Mesures du codec 2 dans `docs/BENCHMARK.md`.
 - Site de présentation publié sur GitHub Pages : animation du parcours des fichiers,
   figures interactives (principe des tiroirs, coût d'un caractère selon la prédiction,
   codage arithmétique, divergence d'un décodeur non déterministe), démonstration
   AES-256-GCM dans le navigateur, graphiques des mesures.
+
+### Corrigé
+
+- `Archive.ouvrir`, `Archive.extraire` et `creer_archive` acceptent des chemins en texte,
+  comme le montrait déjà l'exemple du README.
+
+### Modifié
+
+- Le codec 2 n'est plus « réservé au codec neuronal » : il désigne le mélange de contextes.
+  Un réseau pré-entraîné prendra un nouvel identifiant.
 
 ## [0.1.0] - 2026-11-10
 

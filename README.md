@@ -40,10 +40,12 @@ codec neuronal **en arithmétique entière**, sans perte, et un conteneur série
 chiffrement authentifié, accès direct aux fichiers, lecteur durci.
 
 > [!IMPORTANT]
-> **État actuel : prototype 0.1.0.** Le conteneur, le chiffrement, les tests et le banc de
-> mesure sont en place. Le codec neuronal n'est pas encore écrit : Saku compresse
-> aujourd'hui avec zstd, donc **il ne fait pas mieux que zstd**. Le format peut encore
-> changer : ne confiez pas à Saku la seule copie d'un fichier.
+> **État actuel : prototype.** Le conteneur, le chiffrement, les tests et le banc de mesure
+> sont en place. Le **codec 2** (mélange de contextes en arithmétique entière, sans modèle
+> externe) bat `xz -9` de 5,1 % sur un corpus de code applicatif, et reste à 0,9 % derrière
+> sur les sources de CPython, à environ 0,75 Mo/s. Le réseau de neurones pré-entraîné n'est
+> pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie
+> d'un fichier.
 
 ### Ce que Saku ne promettra jamais
 
@@ -68,6 +70,7 @@ uv sync
 ```bash
 uv run saku creer projet.saku mon-projet/              # compresser
 uv run saku creer --chiffrer coffre.saku mon-projet/   # compresser puis chiffrer
+uv run saku creer --codec cm projet.saku mon-projet/    # codec 2 : plus compact, plus lent
 uv run saku lister projet.saku                         # voir le contenu
 uv run saku verifier projet.saku                       # tout relire et tout contrôler
 uv run saku extraire projet.saku -C sortie/            # tout extraire
@@ -101,7 +104,7 @@ flowchart LR
     A[Dossiers] --> B[Collecte<br/>SHA-256 par fichier]
     B --> C[Routage<br/>texte / binaire, tri par extension]
     C --> D[Blocs indépendants<br/>8 Mio]
-    D --> E[Compression<br/>zstd 19, codec neuronal à venir]
+    D --> E[Compression<br/>zstd 19 ou codec 2]
     E --> F[Chiffrement<br/>AES-256-GCM, facultatif]
     F --> G[(archive .saku)]
 ```
@@ -112,8 +115,10 @@ flowchart LR
    par chemin : les contenus qui se ressemblent deviennent voisins.
 3. **Blocs.** Le tout forme un seul flux, coupé en blocs indépendants de 8 Mio. Un bloc ne
    mélange jamais texte et binaire, et chacun se lit seul : c'est ce qui donne l'accès direct.
-4. **Compression.** zstd niveau 19 aujourd'hui ; le bloc est stocké tel quel si rien n'est à
-   gagner. Le codec neuronal prendra cette place.
+4. **Compression.** zstd niveau 19 par défaut, ou le **codec 2** (`--codec cm`) : un
+   prédicteur à mélange de contextes qui apprend le bloc en le lisant, et un codeur
+   arithmétique, tout en entiers ([CODEC-2.md](docs/CODEC-2.md)). Un bloc que rien ne réduit
+   est stocké tel quel.
 5. **Chiffrement.** On compresse d'abord, on chiffre ensuite : des données chiffrées ne se
    compressent plus.
 6. **Index.** La liste des fichiers et des blocs est écrite à la fin, compressée et chiffrée
@@ -164,13 +169,18 @@ seul. Chaque ligne est vérifiée par un aller-retour octet pour octet.
 | `xz -9` | 22 909 784 | 1,626 | 4,92 | 2,1 Mo/s | 101,9 Mo/s |
 | `zstd --ultra -22 --long=27` | 23 200 760 | 1,647 | 4,86 | 1,4 Mo/s | 425,3 Mo/s |
 | `zstd -19` | 23 971 699 | 1,702 | 4,70 | 2,1 Mo/s | 649,7 Mo/s |
-| **Saku 0.1.0** | **24 384 040** | **1,731** | **4,62** | **2,5 Mo/s** | **45,1 Mo/s** |
-| **Saku 0.1.0, chiffré** | **24 384 168** | **1,731** | **4,62** | **2,6 Mo/s** | **35,9 Mo/s** |
+| **Saku, codec 2** | **23 107 271** | **1,640** | **4,88** | **0,8 Mo/s** | **0,8 Mo/s** |
+| Saku, zstd | 24 384 040 | 1,731 | 4,62 | 2,5 Mo/s | 45,1 Mo/s |
+| Saku, zstd, chiffré | 24 384 168 | 1,731 | 4,62 | 2,6 Mo/s | 35,9 Mo/s |
 
-Ce que ça montre, sans enjoliver : Saku est aujourd'hui **1,7 % derrière `zstd -19`** et
-**6,4 % derrière `xz -9`**. L'écart vient de l'index (une empreinte par fichier) et du découpage
-en blocs indépendants. Chiffrer coûte **128 octets**. L'extraction est lente, car Saku écrit et
-contrôle chaque fichier en Python là où les autres ne restituent qu'un tar.
+Ce que ça montre, sans enjoliver :
+
+- **Codec 2** : devant les deux zstd, mais **0,9 % derrière `xz -9`**. Cet écart est presque
+  entièrement l'index de Saku : 219 777 octets, dont 161 440 d'empreintes SHA-256 (une par
+  fichier). Les données seules tiennent en moins que l'archive xz. Sur le second corpus (code
+  applicatif, 11,9 Mo), le codec 2 bat `xz -9` de **5,1 %**. Le prix : environ 0,75 Mo/s.
+- **Avec zstd** (par défaut) : 1,7 % derrière `zstd -19`, pour les mêmes raisons d'index et
+  de blocs indépendants. Chiffrer coûte **128 octets**.
 
 Protocole, machine, second corpus, mémoire consommée, cmix et ts_zip :
 [**docs/BENCHMARK.md**](docs/BENCHMARK.md).
@@ -180,8 +190,11 @@ Protocole, machine, second corpus, mémoire consommée, cmix et ts_zip :
 - [x] Format v0, conteneur, chiffrement authentifié
 - [x] Lecteur durci et tests d'archives hostiles
 - [x] Banc de mesure vérifié contre zstd, xz, cmix et ts_zip
-- [ ] **Codec neuronal sans perte en arithmétique entière** — le cœur du projet
-- [ ] Reproductibilité prouvée entre machines et architectures (x86-64, ARM64)
+- [x] Codec 2 : mélange de contextes en entiers, deux implémentations (Python, C) identiques octet pour octet
+- [x] Sortie identique quel que soit le niveau d'optimisation du compilateur
+- [ ] Reproductibilité prouvée sur une autre architecture (ARM64)
+- [ ] Codec 2 v2 : plus compact (raffinement des probabilités, cases vérifiées) et plus rapide
+- [ ] **Réseau de neurones pré-entraîné, en arithmétique entière** — taille du modèle comprise
 - [ ] Conteneurs déjà compressés (.docx, .zip, JPEG) déballés et reconstruits à l'identique
 - [ ] Correction d'erreurs, clé enveloppée, ajout de fichiers
 - [ ] Mode avec perte pour les médias, **uniquement sur demande explicite**
@@ -194,7 +207,7 @@ n'a pas de raison d'exister. Les conditions d'abandon sont écrites à l'avance 
 
 ```
 src/saku/      la bibliothèque et la commande saku
-tests/         91 tests, dont les archives hostiles
+tests/         105 tests, dont les archives hostiles et la conformité du codec 2
 bench/         le banc de mesure (corpus et outils externes non versionnés)
 docs/          spécification du format, mesures, risques, décisions (adr/)
 site/          page de présentation statique
@@ -203,8 +216,8 @@ outils/        pilotage du modèle local, génération du rapport de mesures
 ```
 
 Une partie du code et des tests a été écrite par un modèle local (Qwen), piloté par les prompts
-de [`prompts/`](prompts/), puis relue et corrigée. Le lecteur et l'écrivain d'archive sont écrits
-à la main.
+de [`prompts/`](prompts/), puis relue et corrigée. Le lecteur et l'écrivain d'archive, et la
+version C du codec 2, sont écrits à la main ; la référence Python du codec 2 vient de Qwen.
 
 ## Contribuer
 

@@ -58,6 +58,7 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
 | xz-9 | 1 753 708 | 1,175 | 6,81 | 6,81 | 2,8 | 125,9 | 174 | 26 |
 | saku | 1 841 226 | 1,234 | 6,48 | 6,48 | 3,1 | 25,3 | 132 | 54 |
 | saku-chiffre | 1 841 277 | 1,234 | 6,48 | 6,48 | 2,7 | 11,2 | 284 | 284 |
+| saku-cm | 1 664 426 | 1,115 | 7,17 | 7,17 | 0,729 | 0,703 | 136 | 126 |
 
 **cpython — 5 045 fichiers, 112 691 061 octets**
 
@@ -68,25 +69,43 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
 | xz-9 | 22 909 784 | 1,626 | 4,92 | 4,92 | 2,1 | 101,9 | 674 | 67 |
 | saku | 24 384 040 | 1,731 | 4,62 | 4,62 | 2,5 | 45,1 | 147 | 73 |
 | saku-chiffre | 24 384 168 | 1,731 | 4,62 | 4,62 | 2,6 | 35,9 | 284 | 284 |
+| saku-cm | 23 107 271 | 1,640 | 4,88 | 4,88 | 0,771 | 0,765 | 150 | 146 |
 
 <!--/MESURES-->
 
 ## Lecture
 
-- **Saku 0.1.0 ne compresse pas mieux que zstd, et c'est attendu** : il utilise zstd niveau 19
-  par blocs indépendants. Sur les corpus entiers, son archive est plus grosse que celle de
-  `zstd -19` de 3,0 % (`code-perso`) et de 1,7 % (`cpython`), et plus grosse que celle de
-  `xz -9` de 5,0 % et 6,4 %.
-- **Une bonne part de l'écart vient de l'index.** Sur `code-perso`, l'index pèse 35 674 octets
-  sur les 54 212 qui séparent Saku de `zstd -19` : il porte une empreinte SHA-256 par fichier,
-  que le tar n'a pas. Le reste vient du découpage en blocs indépendants.
+### Codec 2 (`--codec cm`, mélange de contextes en entiers)
+
+- **Sur `code-perso`, il bat tous les autres outils mesurés** : 1 664 426 octets, soit 5,1 % de
+  moins que `xz -9` et 6,9 % de moins que `zstd -19`.
+- **Sur `cpython`, il reste 0,9 % derrière `xz -9`** (23 107 271 octets contre 22 909 784),
+  mais passe devant `zstd -19` (−3,6 %) et `zstd --ultra -22 --long` (−0,4 %).
+- **L'écart avec xz sur `cpython` est presque entièrement celui de l'index** : 219 777 octets,
+  dont 161 440 d'empreintes SHA-256 (32 octets par fichier, incompressibles par nature).
+  Les données seules tiennent en 22 887 398 octets, moins que l'archive xz entière.
+- **Blocs plus grands** : avec des blocs de 64 Mio au lieu de 8, l'archive `cpython` passe à
+  22 920 441 octets, à 0,05 % de `xz -9`. Archive relue entièrement par `saku verifier`
+  (5 045 empreintes conformes) ; cette variante n'est pas passée par le banc, donc pas de
+  mesure de vitesse ni de mémoire. La taille de bloc n'est pas encore réglable en ligne de
+  commande.
+- **Le prix est la vitesse** : 0,7 à 0,8 Mo/s, dans les deux sens, contre 2 à 650 Mo/s pour
+  zstd et xz. Mémoire de pointe : environ 150 Mio.
+- **Aucun modèle externe** : la colonne « modèle compris » est égale au ratio.
+
+### Saku avec zstd (codec par défaut)
+
+- Il ne fait pas mieux que zstd, et c'est attendu : il utilise zstd niveau 19 par blocs
+  indépendants, et son index porte une empreinte par fichier. Son archive est plus grosse que
+  celle de `zstd -19` de 3,0 % (`code-perso`) et 1,7 % (`cpython`).
 - **Le chiffrement ne coûte presque rien en taille** : 51 octets de plus sur `code-perso`,
   128 sur `cpython`. Il coûte de la mémoire (Argon2id réserve 256 Mio) et un peu de temps.
-- **La décompression est lente** : 25 à 45 Mo/s, contre plusieurs centaines pour zstd. Voir
-  plus haut ce qui n'est pas comparable ; le reste est le prix du prototype en Python.
-- **Sur les échantillons d'un mégaoctet**, la colonne « modèle compris » montre ce que coûte
-  un modèle de 171 Mo quand on l'ajoute à une petite archive. C'est le risque n° 2 de
-  [RISQUES.md](RISQUES.md).
+
+### cmix et ts_zip
+
+- **cmix** n'a pas fini l'échantillon d'1 Mo de `code-perso` en 5 400 secondes : il est
+  marqué « non mesuré » plutôt qu'estimé.
+- **ts_zip**, sur processeur seul, est en cours de mesure sur les échantillons.
 
 ## Reproduire
 
