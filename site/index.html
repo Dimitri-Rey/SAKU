@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saku — un archiveur qui compresse puis chiffre</title>
+<meta name="description" content="Saku : archiveur libre, compression puis chiffrement authentifié, format documenté. Comment il fonctionne et ce qu'il faut pour le faire tourner.">
+<style>
+  :root { --encre: #1a1a1a; --gris: #5c5c5c; --trait: #d9d9d9; --fond: #fff; }
+  * { box-sizing: border-box; }
+  html { font-size: 18px; }
+  body { margin: 0; background: var(--fond); color: var(--encre);
+         font-family: Georgia, "Times New Roman", serif; line-height: 1.6; }
+  main, header, footer { max-width: 42rem; margin: 0 auto; padding: 0 1.25rem; }
+  header { padding-top: 3.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--trait); }
+  h1 { font-size: 2.6rem; line-height: 1.1; margin: 0 0 .6rem; font-weight: normal; }
+  .chapeau { font-size: 1.2rem; margin: 0; }
+  nav { font-family: system-ui, sans-serif; font-size: .8rem; margin-top: 1.5rem; }
+  nav a { margin-right: 1rem; white-space: nowrap; }
+  h2 { font-size: 1.45rem; font-weight: normal; margin: 3rem 0 .8rem; padding-top: 1rem;
+       border-top: 1px solid var(--trait); }
+  main > h2:first-child { border-top: 0; margin-top: 1.2rem; }
+  h3 { font-size: 1rem; margin: 1.8rem 0 .3rem; }
+  a { color: inherit; text-underline-offset: 3px; }
+  p, li { hyphens: auto; }
+  ol, ul { padding-left: 1.3rem; }
+  li { margin: .35rem 0; }
+  dt { font-weight: bold; margin-top: .9rem; }
+  dd { margin: 0; }
+  code, pre, .mono { font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace; font-size: .82rem; }
+  pre { border: 1px solid var(--trait); padding: .8rem 1rem; overflow-x: auto; line-height: 1.5; }
+  .note { border-left: 2px solid var(--encre); padding-left: 1rem; margin: 1.4rem 0; }
+  .defile { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-family: system-ui, sans-serif; font-size: .78rem; }
+  caption { text-align: left; font-family: Georgia, serif; font-size: .9rem; padding-bottom: .5rem; color: var(--gris); }
+  th, td { border-bottom: 1px solid var(--trait); padding: .4rem .5rem; text-align: right;
+           white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; border-bottom-color: var(--encre); vertical-align: bottom; white-space: normal; }
+  tr.saku td { font-weight: 600; }
+  td.vide { text-align: left; color: var(--gris); white-space: normal; }
+  figure { margin: 1.5rem 0; }
+  figcaption { font-size: .85rem; color: var(--gris); margin-top: .5rem; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: system-ui, sans-serif; font-size: 12px; fill: var(--encre); }
+  svg rect { fill: none; stroke: var(--encre); stroke-width: 1; }
+  svg .fin { fill: var(--gris); font-size: 11px; }
+  footer { margin-top: 3.5rem; padding-top: 1rem; padding-bottom: 3rem; border-top: 1px solid var(--trait);
+           font-size: .85rem; color: var(--gris); }
+  @media (max-width: 30rem) { html { font-size: 16px; } h1 { font-size: 2.1rem; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Saku</h1>
+  <p class="chapeau">Un archiveur libre qui compresse puis chiffre, avec un format documenté et un lecteur qui se méfie de ce qu'il lit.</p>
+  <nav>
+    <a href="#etat">Où en est le projet</a>
+    <a href="#fonctionnement">Fonctionnement</a>
+    <a href="#mesures">Mesures</a>
+    <a href="#prerequis">Ce qu'il faut</a>
+    <a href="#suite">La suite</a>
+    <a href="https://github.com/Dimitri-Rey/SAKU">Code source</a>
+  </nav>
+</header>
+
+<main>
+
+<h2 id="etat">Où en est le projet</h2>
+<p>Saku est un prototype, version 0.1.0. Ce qui existe aujourd'hui : le format d'archive, la compression par blocs, le chiffrement, une commande pour créer, lister, vérifier et extraire, 91 tests automatiques et un banc de mesure.</p>
+<p>Ce qui n'existe pas encore est aussi ce qui fera l'intérêt du projet : un codec neuronal sans perte pour le texte et le code. En attendant, Saku compresse avec zstd. Il ne fait donc pas mieux que zstd, et les mesures plus bas le montrent sans détour.</p>
+<p class="note">Le format peut encore changer. Ne confiez pas à Saku la seule copie d'un fichier.</p>
+
+<h3>Ce que Saku ne promet pas</h3>
+<ul>
+  <li><strong>Pas de ratio universel.</strong> Réduire n'importe quel gigaoctet à un mégaoctet est impossible : il n'y a pas assez de petits fichiers pour représenter tous les gros. Des données déjà compressées ou aléatoires ne rétrécissent pas.</li>
+  <li><strong>Pas de chiffre sans mesure.</strong> Chaque résultat de cette page vient d'un aller-retour vérifié octet pour octet.</li>
+  <li><strong>Pas de génératif sur du texte ou des chiffres.</strong> Ce que vous archivez, vous le retrouvez à l'identique.</li>
+</ul>
+
+<h2 id="fonctionnement">Comment ça fonctionne</h2>
+<ol>
+  <li><strong>Collecte.</strong> Les dossiers sont parcourus sans suivre les liens symboliques. Chaque fichier reçoit une empreinte SHA-256, qui servira à contrôler l'extraction.</li>
+  <li><strong>Routage.</strong> Les fichiers sont classés en texte ou en binaire, puis rangés par extension et par chemin. Les contenus qui se ressemblent deviennent voisins, ce qui aide le compresseur.</li>
+  <li><strong>Découpage.</strong> Le tout forme un seul flux, coupé en blocs indépendants de 8 Mio. Un bloc ne mélange jamais texte et binaire.</li>
+  <li><strong>Compression.</strong> Chaque bloc est compressé par zstd au niveau 19. Si la compression ne gagne rien, le bloc est stocké tel quel.</li>
+  <li><strong>Chiffrement</strong>, si vous le demandez. Chaque bloc compressé est scellé par AES-256-GCM. On compresse d'abord, on chiffre ensuite : des données chiffrées ne se compressent plus.</li>
+  <li><strong>Index.</strong> La liste des fichiers et des blocs est écrite à la fin, elle aussi compressée et chiffrée. Pour lire un fichier, Saku n'ouvre que les blocs qui le contiennent.</li>
+</ol>
+
+<h3>L'archive, octet par octet</h3>
+<figure>
+<svg viewBox="0 0 680 118" role="img" aria-label="Schéma d'une archive Saku : en-tête, blocs de données, bloc d'index, pied">
+  <rect x="1" y="30" width="96" height="48"/><text x="49" y="52" text-anchor="middle">En-tête</text><text class="fin" x="49" y="68" text-anchor="middle">80 octets</text>
+  <rect x="97" y="30" width="120" height="48"/><text x="157" y="52" text-anchor="middle">Bloc 0</text><text class="fin" x="157" y="68" text-anchor="middle">données</text>
+  <rect x="217" y="30" width="120" height="48"/><text x="277" y="52" text-anchor="middle">Bloc 1</text><text class="fin" x="277" y="68" text-anchor="middle">données</text>
+  <rect x="337" y="30" width="80" height="48" stroke-dasharray="3 3"/><text x="377" y="58" text-anchor="middle">…</text>
+  <rect x="417" y="30" width="150" height="48"/><text x="492" y="52" text-anchor="middle">Bloc d'index</text><text class="fin" x="492" y="68" text-anchor="middle">fichiers et blocs</text>
+  <rect x="567" y="30" width="112" height="48"/><text x="623" y="52" text-anchor="middle">Pied</text><text class="fin" x="623" y="68" text-anchor="middle">16 octets</text>
+  <text class="fin" x="1" y="18">version, paramètres de clé, taille de bloc</text>
+  <text class="fin" x="97" y="100">chaque bloc : 16 octets d'en-tête, puis la charge compressée et chiffrée</text>
+  <text class="fin" x="679" y="18" text-anchor="end">où trouver l'index</text>
+</svg>
+<figcaption>Le lecteur commence par la fin : le pied indique où se trouve l'index, l'index dit où se trouve chaque bloc et quel fichier occupe quelle partie du flux.</figcaption>
+</figure>
+<p>La spécification complète, avec chaque champ et chaque cas de rejet, est dans le dépôt : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/FORMAT-v0.md">FORMAT-v0.md</a>. Elle doit suffire à écrire un autre lecteur sans lire le code.</p>
+
+<h3>Le chiffrement</h3>
+<p>Aucun algorithme maison. Tout vient de la bibliothèque <span class="mono">cryptography</span>.</p>
+<dl>
+  <dt>De la phrase de passe à la clé</dt>
+  <dd>Argon2id, avec un sel aléatoire propre à chaque archive. Par défaut : 3 passes, 256 Mio de mémoire, 4 voies. Chaque essai d'un attaquant lui coûte donc 256 Mio de mémoire.</dd>
+  <dt>Le scellement des blocs</dt>
+  <dd>AES-256-GCM. Chaque bloc porte une étiquette d'authentification de 16 octets : un seul bit modifié et le bloc est refusé.</dd>
+  <dt>Un numéro par bloc</dt>
+  <dd>Le numéro du bloc entre dans le chiffrement. Deux blocs échangés, ou un bloc recopié à la place d'un autre, ne se déchiffrent plus.</dd>
+  <dt>L'en-tête est lié au contenu</dt>
+  <dd>L'empreinte de l'en-tête entre dans le calcul de chaque étiquette. On ne peut pas modifier les paramètres de l'archive sans invalider tous les blocs.</dd>
+</dl>
+<p>Ce qui reste visible dans une archive chiffrée : sa taille, le nombre de blocs et la taille de chacun. Les noms de fichiers, eux, sont dans l'index, donc chiffrés.</p>
+
+<h3>Un lecteur méfiant</h3>
+<p>Une archive peut venir de n'importe qui. Le lecteur la traite comme hostile :</p>
+<ul>
+  <li>il contrôle chaque taille annoncée avant de réserver de la mémoire, ce qui écarte les bombes de décompression ;</li>
+  <li>il refuse les chemins absolus, les <span class="mono">..</span>, les doublons, et n'écrit jamais à travers un lien symbolique déjà présent ;</li>
+  <li>il écrit chaque fichier sous un nom temporaire, vérifie son empreinte SHA-256, et ne le met en place qu'ensuite ;</li>
+  <li>il répond par une erreur claire à toute anomalie, jamais par un contenu partiel présenté comme bon.</li>
+</ul>
+<p>Les tests inversent un bit à environ 3 000 positions réparties sur toute l'archive, la coupent à autant de longueurs différentes et truquent l'index. Dans tous les cas, l'archive doit être refusée ou rendre exactement le contenu d'origine.</p>
+
+<h2 id="mesures">Ce qui est mesuré</h2>
+<p>Chaque outil compresse le corpus, le décompresse, et le résultat est comparé à l'original octet pour octet. Un chiffre n'apparaît que si la comparaison réussit. Les mesures datent du 10 novembre 2026, sur un serveur à deux Xeon E5-2678 v3, sans carte graphique, un seul fil par outil.</p>
+<!--MESURES-->
+<div class="defile"><table><caption>code-perso — 709 fichiers, 11 938 143 octets</caption>
+<thead><tr><th>Outil</th><th>Archive (octets)</th><th>bits/octet</th><th>Ratio</th><th>Ratio, modèle compris</th><th>Compression (Mo/s)</th><th>Décompression (Mo/s)</th><th>Mémoire compr. (Mio)</th><th>Mémoire décompr. (Mio)</th></tr></thead><tbody>
+<tr><td>zstd-19</td><td>1 787 014</td><td>1,198</td><td>6,68</td><td>6,68</td><td>3,2</td><td>375,6</td><td>98</td><td>24</td></tr>
+<tr><td>zstd-22-long</td><td>1 783 228</td><td>1,195</td><td>6,69</td><td>6,69</td><td>1,8</td><td>378,6</td><td>282</td><td>26</td></tr>
+<tr><td>xz-9</td><td>1 753 708</td><td>1,175</td><td>6,81</td><td>6,81</td><td>2,8</td><td>125,9</td><td>174</td><td>26</td></tr>
+<tr class="saku"><td>saku</td><td>1 841 226</td><td>1,234</td><td>6,48</td><td>6,48</td><td>3,1</td><td>25,3</td><td>132</td><td>54</td></tr>
+<tr class="saku"><td>saku-chiffre</td><td>1 841 277</td><td>1,234</td><td>6,48</td><td>6,48</td><td>2,7</td><td>11,2</td><td>284</td><td>284</td></tr>
+</tbody></table></div>
+<div class="defile"><table><caption>cpython — 5 045 fichiers, 112 691 061 octets</caption>
+<thead><tr><th>Outil</th><th>Archive (octets)</th><th>bits/octet</th><th>Ratio</th><th>Ratio, modèle compris</th><th>Compression (Mo/s)</th><th>Décompression (Mo/s)</th><th>Mémoire compr. (Mio)</th><th>Mémoire décompr. (Mio)</th></tr></thead><tbody>
+<tr><td>zstd-19</td><td>23 971 699</td><td>1,702</td><td>4,70</td><td>4,70</td><td>2,1</td><td>649,7</td><td>206</td><td>40</td></tr>
+<tr><td>zstd-22-long</td><td>23 200 760</td><td>1,647</td><td>4,86</td><td>4,86</td><td>1,4</td><td>425,3</td><td>846</td><td>115</td></tr>
+<tr><td>xz-9</td><td>22 909 784</td><td>1,626</td><td>4,92</td><td>4,92</td><td>2,1</td><td>101,9</td><td>674</td><td>67</td></tr>
+<tr class="saku"><td>saku</td><td>24 384 040</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,5</td><td>45,1</td><td>147</td><td>73</td></tr>
+<tr class="saku"><td>saku-chiffre</td><td>24 384 168</td><td>1,731</td><td>4,62</td><td>4,62</td><td>2,6</td><td>35,9</td><td>284</td><td>284</td></tr>
+</tbody></table></div>
+<!--/MESURES-->
+<p>Les corpus sont du code source : celui de CPython 3.14.0, que chacun peut télécharger, et un lot de code d'applications privées. Les deux échantillons d'environ un mégaoctet en sont tirés, parce que cmix et ts_zip sont trop lents pour les corpus entiers.</p>
+<h3>Ce que disent ces chiffres</h3>
+<ul>
+  <li><strong>Saku ne bat pas zstd aujourd'hui.</strong> Sur les corpus entiers, son archive est plus grosse de 1,7 à 3 % que celle de <span class="mono">zstd -19</span>, et de 5 à 6,4 % que celle de <span class="mono">xz -9</span>. C'est attendu : il utilise zstd par blocs séparés, et son index porte une empreinte par fichier.</li>
+  <li><strong>Chiffrer ne coûte presque rien en taille</strong> : 51 et 128 octets de plus sur les deux corpus entiers.</li>
+  <li><strong>L'extraction est lente</strong>, 25 à 45 Mo/s. Saku écrit et contrôle chaque fichier là où les autres ne restituent qu'un tar, et le prototype est en Python.</li>
+  <li><strong>La colonne « modèle compris »</strong> ajoute à l'archive la taille du modèle dont le décodeur a besoin. Elle ne change rien pour les outils classiques ; pour un compresseur neuronal, elle décide de tout.</li>
+</ul>
+<p>Le protocole complet et les commandes pour refaire ces mesures sont dans <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/BENCHMARK.md">BENCHMARK.md</a>.</p>
+
+<h2 id="prerequis">Ce qu'il faut pour le faire fonctionner</h2>
+<dl>
+  <dt>Un système</dt>
+  <dd>Linux ou macOS. Windows n'est pas testé.</dd>
+  <dt>Python 3.14 ou plus récent</dt>
+  <dd>Saku utilise le module zstd entré dans la bibliothèque standard avec cette version.</dd>
+  <dt>uv</dt>
+  <dd>Pour installer l'environnement et la seule dépendance, <span class="mono">cryptography</span>. Voir <a href="https://docs.astral.sh/uv/">docs.astral.sh/uv</a>.</dd>
+  <dt>De la mémoire</dt>
+  <dd>Environ 150 Mio pour créer une archive, près de 300 Mio si elle est chiffrée : la dérivation de clé en réserve 256 à elle seule. Valeurs mesurées sur les corpus ci-dessus.</dd>
+  <dt>Pas de carte graphique</dt>
+  <dd>Rien dans la version actuelle n'en a besoin.</dd>
+</dl>
+<pre>git clone https://github.com/Dimitri-Rey/SAKU.git
+cd SAKU
+uv sync
+
+uv run saku creer projet.saku mon-projet/
+uv run saku creer --chiffrer coffre.saku mon-projet/
+uv run saku lister projet.saku
+uv run saku verifier projet.saku
+uv run saku extraire projet.saku -C sortie/</pre>
+<p>La phrase de passe est demandée au clavier, ou lue dans la variable <span class="mono">SAKU_MOT_DE_PASSE</span>. Elle ne se passe jamais en argument : elle resterait dans l'historique du terminal.</p>
+<p>Pour refaire les mesures, il faut en plus les commandes <span class="mono">zstd</span> et <span class="mono">xz</span>, puis :</p>
+<pre>uv run python bench/bench.py chemin/du/corpus</pre>
+
+<h2 id="suite">La suite : le codec neuronal</h2>
+<p>Un modèle de langage qui prédit bien le caractère suivant permet de le coder en très peu de bits. C'est ainsi que les meilleurs compresseurs de texte battent largement zstd et xz. Trois obstacles expliquent pourquoi personne ne s'en sert au quotidien, et ce sont eux que Saku doit lever, dans cet ordre.</p>
+<ol>
+  <li><strong>La reproductibilité.</strong> Le décodeur doit recalculer exactement les mêmes probabilités que l'encodeur. En virgule flottante, le résultat change d'un processeur à l'autre, et un seul bit d'écart rend l'archive illisible. Le codec de Saku fera donc ses calculs en nombres entiers. C'est le premier chantier.</li>
+  <li><strong>La taille du modèle.</strong> Le modèle fait partie du décodeur, et sa taille compte dans le ratio. Un modèle de 170 Mo ne se rembourse que sur de très grosses archives.</li>
+  <li><strong>La vitesse.</strong> Ces compresseurs travaillent en kilooctets par seconde sur un processeur.</li>
+</ol>
+<p>Si le codec neuronal ne bat pas xz et zstd, modèle compris et à un débit supportable, Saku n'a pas de raison d'exister : le reste se fait déjà très bien avec des outils éprouvés. Les conditions d'échec sont écrites noir sur blanc dans <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/RISQUES.md">RISQUES.md</a>.</p>
+
+<h3>Plus tard</h3>
+<ul>
+  <li>Déballer les conteneurs déjà compressés (.docx, .zip, JPEG), les recompresser mieux et les reconstruire à l'identique.</li>
+  <li>Correction d'erreurs, clé enveloppée pour changer de phrase de passe sans tout réécrire, ajout de fichiers.</li>
+  <li>Un mode avec perte pour les photos, la vidéo et le son, uniquement sur demande explicite, jamais par défaut.</li>
+</ul>
+
+</main>
+
+<footer>
+  <p>Saku est un logiciel libre sous licence MIT. Code, spécification et mesures : <a href="https://github.com/Dimitri-Rey/SAKU">github.com/Dimitri-Rey/SAKU</a>.</p>
+  <p>Page mise à jour le 10 novembre 2026.</p>
+</footer>
+</body>
+</html>

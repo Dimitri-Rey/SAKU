@@ -1,0 +1,65 @@
+# Variables d'environnement et secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Secrets et clés
+*.pem
+*.key
+id_rsa*
+secrets.json
+credentials.json
+
+# Logs
+*.log
+logs/
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Node / JS / TS
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+npm-debug.log*
+yarn-error.log*
+
+# Go
+/bin/
+/pkg/
+
+# Rust
+/target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+
+# Déploiement / artefacts
+k8s/overlays/prod/
+*.tfvars
+.terraform/
+
+# Saku : corpus, archives et outils externes de mesure (jamais commités)
+bench/corpus/
+bench/externes/
+bench/sorties/
+*.saku
+uv.lock.bak
+bench/telech/
