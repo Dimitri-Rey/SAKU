@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://dimitri-rey.github.io/SAKU/"><strong>Le site, avec démonstrations</strong></a> ·
   <a href="#démarrage-rapide">Démarrage rapide</a> ·
   <a href="#comment-ça-marche">Comment ça marche</a> ·
   <a href="#mesures">Mesures</a> ·
