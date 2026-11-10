@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 150" width="720" height="150" role="img" aria-label="Structure d'une archive Saku : en-tête de 80 octets, blocs de données, bloc d'index, pied de 16 octets">
+  <rect width="720" height="150" fill="#ffffff"/>
+  <g font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" fill="#1a1a1a">
+    <g fill="none" stroke="#1a1a1a" stroke-width="1">
+      <rect x="20.5" y="44.5" width="96" height="50"/>
+      <rect x="116.5" y="44.5" width="124" height="50"/>
+      <rect x="240.5" y="44.5" width="124" height="50"/>
+      <rect x="364.5" y="44.5" width="70" height="50" stroke-dasharray="3 3"/>
+      <rect x="434.5" y="44.5" width="152" height="50"/>
+      <rect x="586.5" y="44.5" width="112" height="50"/>
+    </g>
+    <g font-size="13" text-anchor="middle">
+      <text x="68" y="66">En-tête</text>
+      <text x="178" y="66">Bloc 0</text>
+      <text x="302" y="66">Bloc 1</text>
+      <text x="399" y="73">…</text>
+      <text x="510" y="66">Bloc d'index</text>
+      <text x="642" y="66">Pied</text>
+    </g>
+    <g font-size="11" fill="#5c5c5c" text-anchor="middle">
+      <text x="68" y="83">80 octets</text>
+      <text x="178" y="83">données</text>
+      <text x="302" y="83">données</text>
+      <text x="510" y="83">fichiers et blocs</text>
+      <text x="642" y="83">16 octets</text>
+    </g>
+    <g font-size="11" fill="#5c5c5c">
+      <text x="20" y="30">version, paramètres de clé, taille de bloc, CRC</text>
+      <text x="698" y="30" text-anchor="end">position de l'index</text>
+      <text x="116" y="116">chaque bloc : 16 octets d'en-tête, puis la charge compressée et chiffrée</text>
+      <text x="116" y="134">(étiquette AES-GCM de 16 octets incluse)</text>
+    </g>
+  </g>
+</svg>
