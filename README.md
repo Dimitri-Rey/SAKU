@@ -87,8 +87,8 @@ creer_archive("projet.saku", ["mon-projet"], mot_de_passe="phrase longue et uniq
 with Archive.ouvrir("projet.saku", "phrase longue et unique") as archive:
     for fichier in archive.fichiers:
         print(fichier.taille, fichier.chemin)
-    contenu = archive.lire("mon-projet/README.md")   # ne déchiffre que les blocs utiles
-    archive.verifier()                               # lève une erreur à la moindre anomalie
+    contenu = archive.lire("mon-projet/README.md")  # ne déchiffre que les blocs utiles
+    archive.verifier()  # lève une erreur à la moindre anomalie
 ```
 
 </details>
