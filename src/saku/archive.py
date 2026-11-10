@@ -40,7 +40,8 @@ TYPE_DONNEES = 1
 TYPE_INDEX = 2
 CODEC_STOCKE = 0
 CODEC_ZSTD = 1
-CODEC_NEURONAL = 2
+CODEC_CM = 2
+CODECS = {"zstd": CODEC_ZSTD, "cm": CODEC_CM}
 _MORCEAU_LECTURE = 1 << 20
 _PREFIXE_TEMPORAIRE = ".saku-"
 
@@ -125,18 +126,21 @@ def _collecter(sources: Sequence[Path]) -> list[tuple[Path, str]]:
 class _Ecrivain:
     """Ecrit les blocs l'un apres l'autre et tient la liste destinee a l'index."""
 
-    def __init__(self, sortie: BinaryIO, entete: bytes, cle: bytes | None, niveau: int) -> None:
+    def __init__(
+        self, sortie: BinaryIO, entete: bytes, cle: bytes | None, niveau: int, codec: int
+    ) -> None:
         self._sortie = sortie
         self._entete = entete
         self._cle = cle
         self._niveau = niveau
+        self._codec = codec
         self.blocs: list[dict[str, int]] = []
         sortie.write(entete)
 
     def ecrire_donnees(self, clair: bytes) -> None:
         """Ecrit un bloc de donnees, en repli « stocke » si la compression ne gagne rien."""
-        charge = compresser(CODEC_ZSTD, clair, self._niveau)
-        id_codec = CODEC_ZSTD
+        charge = compresser(self._codec, clair, self._niveau)
+        id_codec = self._codec
         if len(charge) >= len(clair):
             charge, id_codec = clair, CODEC_STOCKE
         position = self._ecrire(TYPE_DONNEES, id_codec, len(clair), charge, len(self.blocs))
@@ -183,13 +187,14 @@ def _remplir_blocs(ecrivain: _Ecrivain, groupe: Sequence[_Source], taille_bloc: 
 
 
 def creer_archive(
-    destination: Path,
-    sources: Sequence[Path],
+    destination: str | os.PathLike[str],
+    sources: Sequence[str | os.PathLike[str]],
     *,
     mot_de_passe: str | None = None,
     taille_bloc: int = 8 * 1024 * 1024,
     niveau: int = 19,
     argon2: ParametresArgon2 | None = None,
+    codec: str = "zstd",
 ) -> None:
     """Cree l'archive `destination` a partir de fichiers ou de dossiers.
 
@@ -197,7 +202,13 @@ def creer_archive(
     `mot_de_passe` est fourni. Leve `FileExistsError` si la destination existe,
     `SourceInvalide` si une source ne peut pas etre archivee fidelement, `ValueError` si un
     parametre est hors des bornes du format.
+
+    `codec` : "zstd" (rapide) ou "cm" (codec 2, plus compact, bien plus lent).
     """
+    destination = Path(destination)
+    sources = [Path(source) for source in sources]
+    if codec not in CODECS:
+        raise ValueError(f"codec inconnu : {codec} (attendu : {', '.join(CODECS)})")
     if destination.exists():
         raise FileExistsError(f"la destination existe déjà : {destination}")
     if mot_de_passe is not None and not mot_de_passe:
@@ -233,7 +244,7 @@ def creer_archive(
     ) as sortie:
         temporaire = Path(sortie.name)
         try:
-            ecrivain = _Ecrivain(sortie, entete_octets, cle, niveau)
+            ecrivain = _Ecrivain(sortie, entete_octets, cle, niveau, CODECS[codec])
             # Un bloc ne melange jamais textes et autres : un codec par groupe.
             for _, groupe in itertools.groupby(analysees, key=lambda s: s.texte):
                 _remplir_blocs(ecrivain, list(groupe), taille_bloc)
@@ -392,13 +403,13 @@ class Archive:
         self._par_chemin = {f.chemin: f for f in self._fichiers}
 
     @classmethod
-    def ouvrir(cls, chemin: Path, mot_de_passe: str | None = None) -> Archive:
+    def ouvrir(cls, chemin: str | os.PathLike[str], mot_de_passe: str | None = None) -> Archive:
         """Ouvre et valide l'archive : en-tete, pied, index, en-tete de chaque bloc.
 
         Leve `ArchiveInvalide`, `EchecAuthentification` (mauvais mot de passe ou archive
         modifiee) ou `MotDePasseRequis`.
         """
-        flux = chemin.open("rb")
+        flux = Path(chemin).open("rb")  # noqa: SIM115 — fermé par Archive.fermer()
         try:
             return cls(flux, mot_de_passe)
         except BaseException:
@@ -438,8 +449,6 @@ class Archive:
             position = _entier(champs["position"], "position", TAILLE_ENTETE, position_index)
             taille = _entier(champs["taille_claire"], "taille_claire", 1, self._entete.taille_bloc)
             id_codec = _entier(champs["id_codec"], "id_codec", 0, 255)
-            if id_codec == CODEC_NEURONAL:
-                raise ArchiveInvalide("codec neuronal : non pris en charge par cette version")
             if position != position_attendue or position + TAILLE_ENTETE_BLOC > position_index:
                 raise ArchiveInvalide("index : blocs non contigus")
             octets_entete = self._lire_a(position, TAILLE_ENTETE_BLOC)
@@ -511,13 +520,16 @@ class Archive:
             for _ in self._morceaux(fichier):
                 pass
 
-    def extraire(self, destination: Path, chemins: Sequence[str] | None = None) -> None:
+    def extraire(
+        self, destination: str | os.PathLike[str], chemins: Sequence[str] | None = None
+    ) -> None:
         """Extrait tout, ou les seuls `chemins` demandes, sous `destination`.
 
         Un fichier n'apparait a sa place qu'une fois son empreinte verifiee. Refuse de
         traverser un lien symbolique existant dans la destination.
         """
         voulus = None if chemins is None else {self._trouver(c).chemin for c in chemins}
+        destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         racine = destination.resolve(strict=True)
         for fichier in self._fichiers:

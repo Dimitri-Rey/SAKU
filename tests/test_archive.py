@@ -216,3 +216,36 @@ def test_archive_clair_deterministe(arbre: Path, tmp_path: Path) -> None:
     assert dest1.read_bytes() == dest2.read_bytes(), (
         "deux archives claires des mêmes données doivent être identiques au bit près"
     )
+
+
+@pytest.mark.parametrize("mot_de_passe", [None, MOT_DE_PASSE], ids=["clair", "chiffre"])
+def test_aller_retour_codec_cm(arbre: Path, tmp_path: Path, mot_de_passe: str | None) -> None:
+    dest = tmp_path / "archive.saku"
+    creer_archive(
+        dest,
+        [arbre],
+        mot_de_passe=mot_de_passe,
+        taille_bloc=TAILLE_BLOC_TEST,
+        argon2=ARGON2_RAPIDE,
+        codec="cm",
+    )
+    with Archive.ouvrir(dest, mot_de_passe) as archive:
+        codecs = {bloc.entete.id_codec for bloc in archive._blocs}
+        archive.verifier()
+    assert 2 in codecs  # le texte passe par le codec 2 ; l'aléatoire est stocké
+    _verifier_aller_retour(arbre, dest, mot_de_passe=mot_de_passe)
+
+
+def test_codec_inconnu_refuse(arbre: Path, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="codec"):
+        creer_archive(tmp_path / "x.saku", [arbre], codec="lzma")
+
+
+def test_chemins_en_texte(arbre: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """L'exemple du README passe des chemins en texte, pas des Path."""
+    monkeypatch.chdir(tmp_path)
+    creer_archive("projet.saku", [str(arbre)], taille_bloc=TAILLE_BLOC_TEST)
+    with Archive.ouvrir("projet.saku") as archive:
+        archive.verifier()
+        archive.extraire("sortie")
+    assert (tmp_path / "sortie" / arbre.name / "LISEZMOI.md").exists()
