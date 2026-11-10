@@ -3,6 +3,15 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions :
 [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- Site de présentation publié sur GitHub Pages : animation du parcours des fichiers,
+  figures interactives (principe des tiroirs, coût d'un caractère selon la prédiction,
+  codage arithmétique, divergence d'un décodeur non déterministe), démonstration
+  AES-256-GCM dans le navigateur, graphiques des mesures.
+
 ## [0.1.0] - 2026-11-10
 
 ### Ajouté

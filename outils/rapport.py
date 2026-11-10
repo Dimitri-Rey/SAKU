@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
-DEBUT, FIN = "<!--MESURES-->", "<!--/MESURES-->"
 
 
 def nombre(valeur: float, decimales: int) -> str:
@@ -98,12 +97,18 @@ def en_html(resultats: list[dict]) -> str:
     return "\n".join(sortie)
 
 
-def injecter(chemin: Path, contenu: str, source: Path | None = None) -> None:
-    texte = (source or chemin).read_text()
-    motif = re.compile(re.escape(DEBUT) + ".*?" + re.escape(FIN), re.DOTALL)
+def remplacer(texte: str, nom: str, contenu: str, origine: Path) -> str:
+    debut, fin = f"<!--{nom}-->", f"<!--/{nom}-->"
+    motif = re.compile(re.escape(debut) + ".*?" + re.escape(fin), re.DOTALL)
     if not motif.search(texte):
-        raise SystemExit(f"{source or chemin} : marqueurs {DEBUT} … {FIN} absents")
-    chemin.write_text(motif.sub(lambda _: f"{DEBUT}\n{contenu}\n{FIN}", texte))
+        raise SystemExit(f"{origine} : marqueurs {debut} … {fin} absents")
+    return motif.sub(lambda _: f"{debut}\n{contenu}\n{fin}", texte)
+
+
+def donnees_json(resultats: list[dict]) -> str:
+    """Résultats bruts pour les graphiques du site ; « </ » neutralisé dans le script."""
+    brut = json.dumps(resultats, ensure_ascii=False).replace("</", "<\\/")
+    return f'<script type="application/json" id="donnees">{brut}</script>'
 
 
 def main() -> int:
@@ -112,8 +117,12 @@ def main() -> int:
         resultats += json.loads(Path(fichier).read_text())["resultats"]
     if not resultats:
         raise SystemExit(__doc__)
-    injecter(RACINE / "docs" / "BENCHMARK.md", en_markdown(resultats))
-    injecter(RACINE / "site" / "index.html", en_html(resultats), RACINE / "site" / "gabarit.html")
+    doc = RACINE / "docs" / "BENCHMARK.md"
+    doc.write_text(remplacer(doc.read_text(), "MESURES", en_markdown(resultats), doc))
+    gabarit = RACINE / "site" / "gabarit.html"
+    page = remplacer(gabarit.read_text(), "MESURES", en_html(resultats), gabarit)
+    page = remplacer(page, "DONNEES", donnees_json(resultats), gabarit)
+    (RACINE / "site" / "index.html").write_text(page)
     return 0
 
 
