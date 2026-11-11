@@ -171,3 +171,15 @@ def test_module_executable(tmp_path: Path) -> None:
         text=True,
     )
     assert "1 fichier" in resultat.stdout
+
+
+def test_taille_bloc_et_codec(tmp_path: Path) -> None:
+    """`--taille-bloc` (en Mio) est inscrit dans l'en-tête ; `--codec cm` relit à l'identique."""
+    source = tmp_path / "donnees"
+    source.mkdir()
+    (source / "a.txt").write_text("le chat mange le chat\n" * 200)
+    archive = tmp_path / "a.saku"
+    commande = [sys.executable, "-m", "saku", "creer", "--codec", "cm", "--taille-bloc", "1"]
+    subprocess.run([*commande, str(archive), str(source)], check=True)
+    assert int.from_bytes(archive.read_bytes()[64:68], "little") == 1024 * 1024
+    subprocess.run([sys.executable, "-m", "saku", "verifier", str(archive)], check=True)

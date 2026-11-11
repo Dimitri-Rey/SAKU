@@ -218,8 +218,14 @@ def test_archive_clair_deterministe(arbre: Path, tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("mot_de_passe", [None, MOT_DE_PASSE], ids=["clair", "chiffre"])
-def test_aller_retour_codec_cm(arbre: Path, tmp_path: Path, mot_de_passe: str | None) -> None:
+@pytest.mark.parametrize(
+    ("codec", "id_codec", "mot_de_passe"),
+    [("cm", 3, None), ("cm", 3, MOT_DE_PASSE), ("cm1", 2, None)],
+    ids=["cm-clair", "cm-chiffre", "cm1-clair"],
+)
+def test_aller_retour_codec_cm(
+    arbre: Path, tmp_path: Path, codec: str, id_codec: int, mot_de_passe: str | None
+) -> None:
     dest = tmp_path / "archive.saku"
     creer_archive(
         dest,
@@ -227,12 +233,12 @@ def test_aller_retour_codec_cm(arbre: Path, tmp_path: Path, mot_de_passe: str | 
         mot_de_passe=mot_de_passe,
         taille_bloc=TAILLE_BLOC_TEST,
         argon2=ARGON2_RAPIDE,
-        codec="cm",
+        codec=codec,
     )
     with Archive.ouvrir(dest, mot_de_passe) as archive:
         codecs = {bloc.entete.id_codec for bloc in archive._blocs}
         archive.verifier()
-    assert 2 in codecs  # le texte passe par le codec 2 ; l'aléatoire est stocké
+    assert id_codec in codecs  # le texte passe par le codec choisi ; l'aléatoire est stocké
     _verifier_aller_retour(arbre, dest, mot_de_passe=mot_de_passe)
 
 

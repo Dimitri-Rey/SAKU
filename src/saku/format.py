@@ -162,7 +162,7 @@ class EnTeteBloc:
         crc_charge = struct.unpack_from("<I", donnees, 12)[0]
         if type_b not in (1, 2):
             raise ArchiveInvalide("Type de bloc inconnu")
-        if id_codec not in (0, 1, 2):
+        if id_codec not in (0, 1, 2, 3):
             raise ArchiveInvalide("Codec inconnu")
         return cls(
             type=type_b,

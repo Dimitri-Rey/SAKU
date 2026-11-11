@@ -46,9 +46,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_creer.add_argument("--niveau", type=int, default=19, help="niveau zstd")
     p_creer.add_argument(
         "--codec",
-        choices=["zstd", "cm"],
+        choices=["zstd", "cm", "cm1"],
         default="zstd",
-        help="zstd (rapide) ou cm : codec 2, plus compact, bien plus lent",
+        help="zstd (rapide) ; cm : codec 3, plus compact, bien plus lent ; cm1 : codec 2",
+    )
+    p_creer.add_argument(
+        "--taille-bloc",
+        type=int,
+        default=8,
+        metavar="MIO",
+        help="taille des blocs en Mio (8 par défaut) ; plus grand : plus compact, accès plus lent",
     )
 
     p_extraire = sous.add_parser("extraire", help="Extraire une archive")
@@ -75,6 +82,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mot_de_passe=mot_de_passe,
                 niveau=args.niveau,
                 codec=args.codec,
+                taille_bloc=args.taille_bloc * 1024 * 1024,
             )
         elif args.commande == "extraire":
             with _ouvrir_archive(args.archive) as archive:

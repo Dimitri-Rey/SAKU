@@ -7,6 +7,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions :
 
 ### Ajouté
 
+- **Codec 3** (`--codec cm`) : mélange de contextes v2, spécifié dans `docs/CODEC-3.md` —
+  seaux vérifiés, contexte « mot », deux APM, poids choisis selon la correspondance. Référence
+  Python (`saku.cm3_reference`) et C99 (`src/saku/_cm/cm3.c`) identiques octet pour octet ;
+  vecteurs dans `tests/test_cm3.py`. ADR 0003. Le codec 2 reste lisible et s'écrit encore
+  avec `--codec cm1`.
+- Option `--taille-bloc` (en Mio) de `saku creer`.
 - **Codec 2** (`--codec cm`) : mélange de contextes en arithmétique entière, spécifié dans
   `docs/CODEC-2.md`. Référence en Python (`saku.cm_reference`) et version C99
   (`src/saku/_cm/cm.c`, compilée à la première utilisation) qui produisent les mêmes octets ;

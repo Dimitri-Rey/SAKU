@@ -1,4 +1,4 @@
-"""Codec 2 (mélange de contextes en entiers) : choix entre la version C et la référence Python.
+"""Codecs 2 et 3 (mélange de contextes en entiers) : choix entre la version C et la référence.
 
 La version C est compilée à la première utilisation, dans le cache de l'utilisateur, sous un
 nom qui dépend de l'empreinte du source : un source modifié donne une autre bibliothèque. Sans
@@ -17,16 +17,13 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from types import ModuleType
 
-from saku import cm_reference
+from saku import cm3_reference, cm_reference
 
 journal = logging.getLogger("saku")
-SOURCE = Path(__file__).resolve().parent / "_cm" / "cm.c"
+DOSSIER_C = Path(__file__).resolve().parent / "_cm"
 OPTIONS = ("-std=c99", "-O2", "-fPIC", "-shared", "-fno-strict-aliasing")
-VERSION_SPEC = 1
-
-_bibliotheque: ctypes.CDLL | None = None
-_essaye = False
 
 
 def _cache() -> Path:
@@ -34,106 +31,126 @@ def _cache() -> Path:
     return Path(base) / "saku"
 
 
-def _compiler() -> Path | None:
-    compilateur = shutil.which(os.environ.get("CC", "cc"))
-    if compilateur is None or not SOURCE.exists():
-        return None
-    source = SOURCE.read_bytes()
-    empreinte = hashlib.sha256(source + " ".join(OPTIONS).encode()).hexdigest()[:16]
-    cible = _cache() / f"libsakucm-{empreinte}.so"
-    if cible.exists():
-        return cible
-    cible.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=cible.parent) as dossier:
-        provisoire = Path(dossier) / cible.name
-        resultat = subprocess.run(  # noqa: S603 — compilateur trouvé par which, arguments fixes
-            [compilateur, *OPTIONS, "-o", str(provisoire), str(SOURCE)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if resultat.returncode != 0:
-            journal.warning("codec 2 : compilation C impossible : %s", resultat.stderr[-500:])
+class _Moteur:
+    """Un codec de mélange de contextes : sa version C (compilée à la demande) et sa référence."""
+
+    def __init__(self, fichier: str, prefixe: str, version: int, reference: ModuleType) -> None:
+        self.source = DOSSIER_C / fichier
+        self.prefixe = prefixe
+        self.version = version
+        self.reference = reference
+        self._bibliotheque: ctypes.CDLL | None = None
+        self._essaye = False
+
+    def _compiler(self) -> Path | None:
+        compilateur = shutil.which(os.environ.get("CC", "cc"))
+        if compilateur is None or not self.source.exists():
             return None
-        os.replace(provisoire, cible)
-    return cible
+        source = self.source.read_bytes()
+        empreinte = hashlib.sha256(source + " ".join(OPTIONS).encode()).hexdigest()[:16]
+        cible = _cache() / f"lib{self.prefixe.replace('_', '')}-{empreinte}.so"
+        if cible.exists():
+            return cible
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cible.parent) as dossier:
+            provisoire = Path(dossier) / cible.name
+            resultat = subprocess.run(  # noqa: S603 — compilateur trouvé par which, arguments fixes
+                [compilateur, *OPTIONS, "-o", str(provisoire), str(self.source)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if resultat.returncode != 0:
+                journal.warning(
+                    "%s : compilation C impossible : %s", self.prefixe, resultat.stderr[-500:]
+                )
+                return None
+            os.replace(provisoire, cible)
+        return cible
+
+    def _charger(self) -> ctypes.CDLL | None:
+        if self._essaye:
+            return self._bibliotheque
+        self._essaye = True
+        if os.environ.get("SAKU_CM") == "reference":
+            return None
+        chemin = self._compiler()
+        if chemin is None:
+            journal.warning(
+                "%s : version C indisponible, référence Python utilisée (lente)", self.prefixe
+            )
+            return None
+        bib = ctypes.CDLL(str(chemin))
+        octets = ctypes.POINTER(ctypes.c_uint8)
+        compresser = getattr(bib, f"{self.prefixe}_compresser")
+        compresser.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+            ctypes.POINTER(octets),
+            ctypes.POINTER(ctypes.c_size_t),
+        ]
+        compresser.restype = ctypes.c_int
+        decompresser = getattr(bib, f"{self.prefixe}_decompresser")
+        decompresser.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+        decompresser.restype = ctypes.c_int
+        liberer = getattr(bib, f"{self.prefixe}_liberer")
+        liberer.argtypes = [ctypes.c_void_p]
+        liberer.restype = None
+        version = getattr(bib, f"{self.prefixe}_version")
+        version.restype = ctypes.c_int
+        if version() != self.version:
+            journal.warning("%s : version C inattendue, référence Python utilisée", self.prefixe)
+            return None
+        self._bibliotheque = bib
+        return bib
+
+    def disponible(self) -> bool:
+        """Vrai si la version C est compilée et chargée."""
+        return self._charger() is not None
+
+    def compresser_c(self, clair: bytes) -> bytes:
+        bib = self._charger()
+        if bib is None:
+            raise RuntimeError(f"{self.prefixe} : version C indisponible")
+        sortie = ctypes.POINTER(ctypes.c_uint8)()
+        taille = ctypes.c_size_t()
+        if getattr(bib, f"{self.prefixe}_compresser")(
+            clair, len(clair), ctypes.byref(sortie), ctypes.byref(taille)
+        ):
+            raise MemoryError(f"{self.prefixe} : allocation impossible")
+        try:
+            return ctypes.string_at(sortie, taille.value)
+        finally:
+            getattr(bib, f"{self.prefixe}_liberer")(sortie)
+
+    def decompresser_c(self, charge: bytes, taille_claire: int) -> bytes:
+        bib = self._charger()
+        if bib is None:
+            raise RuntimeError(f"{self.prefixe} : version C indisponible")
+        if taille_claire < 0:
+            raise ValueError("taille_claire négative")
+        tampon = ctypes.create_string_buffer(max(taille_claire, 1))
+        if getattr(bib, f"{self.prefixe}_decompresser")(charge, len(charge), tampon, taille_claire):
+            raise MemoryError(f"{self.prefixe} : allocation impossible")
+        return tampon.raw[:taille_claire]
+
+    def compresser(self, clair: bytes) -> bytes:
+        return self.compresser_c(clair) if self.disponible() else self.reference.compresser(clair)
+
+    def decompresser(self, charge: bytes, taille_claire: int) -> bytes:
+        if taille_claire < 0:
+            raise ValueError("taille_claire négative")
+        if self.disponible():
+            return self.decompresser_c(charge, taille_claire)
+        return self.reference.decompresser(charge, taille_claire)
 
 
-def _charger() -> ctypes.CDLL | None:
-    global _bibliotheque, _essaye
-    if _essaye:
-        return _bibliotheque
-    _essaye = True
-    if os.environ.get("SAKU_CM") == "reference":
-        return None
-    chemin = _compiler()
-    if chemin is None:
-        journal.warning("codec 2 : version C indisponible, référence Python utilisée (lente)")
-        return None
-    bib = ctypes.CDLL(str(chemin))
-    octets = ctypes.POINTER(ctypes.c_uint8)
-    bib.saku_cm_compresser.argtypes = [
-        ctypes.c_char_p,
-        ctypes.c_size_t,
-        ctypes.POINTER(octets),
-        ctypes.POINTER(ctypes.c_size_t),
-    ]
-    bib.saku_cm_compresser.restype = ctypes.c_int
-    bib.saku_cm_decompresser.argtypes = [
-        ctypes.c_char_p,
-        ctypes.c_size_t,
-        ctypes.c_char_p,
-        ctypes.c_size_t,
-    ]
-    bib.saku_cm_decompresser.restype = ctypes.c_int
-    bib.saku_cm_liberer.argtypes = [ctypes.c_void_p]
-    bib.saku_cm_liberer.restype = None
-    bib.saku_cm_version.restype = ctypes.c_int
-    if bib.saku_cm_version() != VERSION_SPEC:
-        journal.warning("codec 2 : version C inattendue, référence Python utilisée")
-        return None
-    _bibliotheque = bib
-    return bib
+CODEC_2 = _Moteur("cm.c", "saku_cm", 1, cm_reference)
+CODEC_3 = _Moteur("cm3.c", "saku_cm3", 2, cm3_reference)
 
-
-def disponible() -> bool:
-    """Vrai si la version C est compilée et chargée."""
-    return _charger() is not None
-
-
-def compresser_c(clair: bytes) -> bytes:
-    bib = _charger()
-    if bib is None:
-        raise RuntimeError("version C du codec 2 indisponible")
-    sortie = ctypes.POINTER(ctypes.c_uint8)()
-    taille = ctypes.c_size_t()
-    if bib.saku_cm_compresser(clair, len(clair), ctypes.byref(sortie), ctypes.byref(taille)):
-        raise MemoryError("codec 2 : allocation impossible")
-    try:
-        return ctypes.string_at(sortie, taille.value)
-    finally:
-        bib.saku_cm_liberer(sortie)
-
-
-def decompresser_c(charge: bytes, taille_claire: int) -> bytes:
-    bib = _charger()
-    if bib is None:
-        raise RuntimeError("version C du codec 2 indisponible")
-    if taille_claire < 0:
-        raise ValueError("taille_claire négative")
-    tampon = ctypes.create_string_buffer(max(taille_claire, 1))
-    if bib.saku_cm_decompresser(charge, len(charge), tampon, taille_claire):
-        raise MemoryError("codec 2 : allocation impossible")
-    return tampon.raw[:taille_claire]
-
-
-def compresser(clair: bytes) -> bytes:
-    return compresser_c(clair) if disponible() else cm_reference.compresser(clair)
-
-
-def decompresser(charge: bytes, taille_claire: int) -> bytes:
-    if taille_claire < 0:
-        raise ValueError("taille_claire négative")
-    if disponible():
-        return decompresser_c(charge, taille_claire)
-    return cm_reference.decompresser(charge, taille_claire)
+# Raccourcis historiques : le codec 2.
+disponible = CODEC_2.disponible
+compresser_c = CODEC_2.compresser_c
+decompresser_c = CODEC_2.decompresser_c
+compresser = CODEC_2.compresser
+decompresser = CODEC_2.decompresser

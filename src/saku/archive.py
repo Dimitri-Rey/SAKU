@@ -40,8 +40,9 @@ TYPE_DONNEES = 1
 TYPE_INDEX = 2
 CODEC_STOCKE = 0
 CODEC_ZSTD = 1
-CODEC_CM = 2
-CODECS = {"zstd": CODEC_ZSTD, "cm": CODEC_CM}
+CODEC_CM1 = 2
+CODEC_CM = 3
+CODECS = {"zstd": CODEC_ZSTD, "cm": CODEC_CM, "cm1": CODEC_CM1}
 _MORCEAU_LECTURE = 1 << 20
 _PREFIXE_TEMPORAIRE = ".saku-"
 
@@ -203,7 +204,8 @@ def creer_archive(
     `SourceInvalide` si une source ne peut pas etre archivee fidelement, `ValueError` si un
     parametre est hors des bornes du format.
 
-    `codec` : "zstd" (rapide) ou "cm" (codec 2, plus compact, bien plus lent).
+    `codec` : "zstd" (rapide), "cm" (codec 3, plus compact, bien plus lent) ou "cm1"
+    (codec 2, l'ancienne version du mélange de contextes, gardée pour comparaison).
     """
     destination = Path(destination)
     sources = [Path(source) for source in sources]

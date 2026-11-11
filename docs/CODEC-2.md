@@ -240,8 +240,8 @@ du format). Il ne peut ni boucler ni écrire plus de `taille_claire` octets.
 
 Pas de somme de contrôle dans les cases hachées (les collisions dégradent la prédiction, pas
 l'exactitude), pas d'étage de raffinement après le mélangeur, pas d'automate d'historique de
-bits. Chacun de ces ajouts sera une **version 2** du codec, avec un autre identifiant : une
-archive écrite en version 1 doit rester lisible telle quelle.
+bits. Ces ajouts forment la **version 2**, publiée comme codec 3 ([CODEC-3.md](CODEC-3.md)) :
+une archive écrite en version 1 reste lisible telle quelle.
 
 ## 12. Coût et limites
 

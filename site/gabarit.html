@@ -208,7 +208,7 @@
 
 <div class="col">
 <section class="revele">
-  <p class="note">Prototype. Le <strong>codec 2</strong>, un mélange de contextes calculé uniquement en nombres entiers, sans modèle externe, bat <span class="mono">xz -9</span> de 5,1 % sur un corpus de code applicatif et reste à 0,9 % derrière sur les sources de CPython, à environ 0,75 Mo/s. Le réseau de neurones pré-entraîné n'est pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
+  <p class="note">Prototype. Le <strong>codec 3</strong>, un mélange de contextes calculé uniquement en nombres entiers, sans modèle externe, bat <span class="mono">xz -9</span> de 14,7 % sur un corpus de code applicatif et de 6,4 % sur les sources de CPython, à environ 0,8 Mo/s. Le réseau de neurones pré-entraîné n'est pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
   <h3>Ce que Saku ne promettra jamais</h3>
   <ul class="net">
     <li><strong>Un ratio universel.</strong> Réduire n'importe quel gigaoctet à un mégaoctet est impossible : il n'existe pas assez de petits fichiers pour représenter tous les gros. Des données déjà compressées ou aléatoires ne rétrécissent pas.</li>
@@ -224,7 +224,7 @@
     <li><div><strong>Collecte.</strong> Les dossiers sont parcourus sans suivre les liens symboliques. Chaque fichier reçoit une empreinte SHA-256, qui servira à contrôler l'extraction.</div></li>
     <li><div><strong>Routage.</strong> Les fichiers sont classés en texte ou en binaire, puis rangés par extension et par chemin. Les contenus qui se ressemblent deviennent voisins, ce qui aide le compresseur.</div></li>
     <li><div><strong>Découpage.</strong> Le tout forme un seul flux, coupé en blocs indépendants de 8 Mio. Un bloc ne mélange jamais texte et binaire, et chacun se lit seul : c'est ce qui permet d'extraire un fichier sans tout décompresser.</div></li>
-    <li><div><strong>Compression.</strong> Chaque bloc passe par zstd au niveau 19, ou, sur demande, par le codec 2 : un prédicteur qui apprend le bloc en le lisant et un codeur arithmétique, tout en nombres entiers. Un bloc que la compression ne réduit pas reste tel quel.</div></li>
+    <li><div><strong>Compression.</strong> Chaque bloc passe par zstd au niveau 19, ou, sur demande, par le codec 3 : un prédicteur qui apprend le bloc en le lisant et un codeur arithmétique, tout en nombres entiers. Un bloc que la compression ne réduit pas reste tel quel.</div></li>
     <li><div><strong>Chiffrement</strong>, si vous le demandez. Chaque bloc compressé est scellé par AES-256-GCM. D'abord compresser, ensuite chiffrer : des données chiffrées ne se compressent plus.</div></li>
     <li><div><strong>Index.</strong> La liste des fichiers et des blocs est écrite à la fin, compressée et chiffrée elle aussi.</div></li>
   </ol>
@@ -316,7 +316,7 @@
   <p class="sans" style="font-size:.78rem;color:var(--gris)">Bits par octet d'origine : plus la barre est courte, mieux c'est. 8 bits par octet, c'est l'absence de compression.</p>
   <h3>Ce que disent ces chiffres</h3>
   <ul class="net">
-    <li><strong>Le codec 2 (<span class="mono">saku-cm</span>) bat tout le monde sur le code applicatif</strong> : 5,1 % de moins que <span class="mono">xz -9</span>, 6,9 % de moins que <span class="mono">zstd -19</span>.</li>
+    <li><strong>Le codec 3 (<span class="mono">saku-cm</span>) bat tout le monde sur les deux corpus</strong> : 14,7 % de moins que <span class="mono">xz -9</span> sur le code applicatif, 6,4 % sur CPython (8,3 % en blocs de 64 Mio). Le codec 2 (<span class="mono">saku-cm1</span>) restait 0,9 % derrière xz sur CPython.</li>
     <li><strong>Sur CPython, il reste 0,9 % derrière xz.</strong> Cet écart, c'est l'index de Saku : 219 777 octets, dont 161 440 d'empreintes SHA-256, une par fichier, incompressibles par nature. Les données seules tiennent en moins que l'archive xz.</li>
     <li><strong>Le prix, c'est la vitesse</strong> : environ 0,75 Mo/s dans les deux sens. Le réglage par défaut reste donc zstd, qui ne fait pas mieux que zstd lui-même : même moteur, plus l'index.</li>
     <li><strong>Chiffrer ne coûte presque rien en taille</strong> : 51 et 128 octets de plus sur les deux corpus.</li>
@@ -338,7 +338,7 @@
     <dt>Python 3.14 ou plus récent</dt><dd>Saku utilise le module zstd entré dans la bibliothèque standard avec cette version.</dd>
     <dt>uv</dt><dd>Pour installer l'environnement et la seule dépendance, <span class="mono">cryptography</span> : <a href="https://docs.astral.sh/uv/">docs.astral.sh/uv</a>.</dd>
     <dt>De la mémoire</dt><dd>Environ 150 Mio pour créer une archive, près de 300 Mio si elle est chiffrée : la dérivation de clé en réserve 256 à elle seule.</dd>
-    <dt>Un compilateur C, de préférence</dt><dd>Pour le codec 2, compilé tout seul à la première utilisation. Sans compilateur, une version Python donne le même résultat, beaucoup plus lentement.</dd>
+    <dt>Un compilateur C, de préférence</dt><dd>Pour les codecs 2 et 3, compilés tout seul à la première utilisation. Sans compilateur, une version Python donne le même résultat, beaucoup plus lentement.</dd>
     <dt>Pas de carte graphique</dt><dd>Rien dans la version actuelle n'en a besoin.</dd>
   </dl>
   <h3>En quatre commandes</h3>
@@ -349,9 +349,9 @@
 <hr>
 <section id="suite" class="revele">
   <h2><span class="num">06</span>La suite : le codec neuronal</h2>
-  <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre, en commençant par un prédicteur simple et entièrement entier, le codec 2, avant le réseau de neurones.</p>
+  <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre, en commençant par un prédicteur simple et entièrement entier, le mélange de contextes des codecs 2 et 3, avant le réseau de neurones.</p>
   <div class="verrous">
-    <div><span class="etat">PREUVE EN COURS</span><b>Reproductibilité</b>Le codec 2 calcule tout en entiers. Deux implémentations écrites séparément, en Python et en C, produisent les mêmes octets, quel que soit le niveau d'optimisation du compilateur. Reste à le prouver sur ARM64.</div>
+    <div><span class="etat">PREUVE EN COURS</span><b>Reproductibilité</b>Les codecs 2 et 3 calculent tout en entiers. Deux implémentations écrites séparément, en Python et en C, produisent les mêmes octets, quel que soit le niveau d'optimisation du compilateur. Reste à le prouver sur ARM64.</div>
     <div><span class="etat">ENSUITE</span><b>Taille du modèle</b>Le modèle fait partie du décodeur et compte dans le ratio. Un modèle de 170 Mo ne se rembourse que sur de très grosses archives.</div>
     <div><span class="etat">ENSUITE</span><b>Vitesse</b>Ces compresseurs avancent en kilooctets par seconde sur un processeur. Un archiveur du quotidien ne peut pas être aussi lent.</div>
   </div>
@@ -363,7 +363,8 @@
     <li class="fait">Banc de mesure vérifié contre zstd, xz, cmix et ts_zip</li>
     <li class="fait">Codec 2 : mélange de contextes en entiers, Python et C identiques octet pour octet</li>
     <li>Reproductibilité prouvée sur ARM64</li>
-    <li>Codec 2 v2, plus compact et plus rapide</li>
+    <li class="fait">Codec 3 : seaux vérifiés, contexte « mot », raffinement des probabilités</li>
+    <li>Codec plus rapide : au-dessus de 1 Mo/s en décompression</li>
     <li>Réseau de neurones pré-entraîné, en arithmétique entière</li>
     <li>Conteneurs déjà compressés (.docx, .zip, JPEG) reconstruits à l'identique</li>
     <li>Correction d'erreurs, clé enveloppée, ajout de fichiers</li>

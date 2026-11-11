@@ -81,6 +81,12 @@ OUTILS = [
         entree="dossier",
     ),
     Outil(
+        "saku-cm-64",
+        (*SAKU, "creer", "--codec", "cm", "--taille-bloc", "64", "{archive}", "{entree}"),
+        (*SAKU, "extraire", "{archive}", "-C", "{sortie}"),
+        entree="dossier",
+    ),
+    Outil(
         "cmix",
         (str(CMIX), "-c", "{entree}", "{archive}"),
         (str(CMIX), "-d", "{archive}", "{sortie}"),

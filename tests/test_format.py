@@ -292,7 +292,7 @@ def test_rejet_type_bloc_inconnu():
 
 def test_rejet_codec_inconnu():
     with pytest.raises(ArchiveInvalide):
-        EnTeteBloc.depuis_octets(_bloc_base(id_codec=3).vers_octets())
+        EnTeteBloc.depuis_octets(_bloc_base(id_codec=4).vers_octets())
 
 
 def test_rejet_reserve_bloc_non_nul():

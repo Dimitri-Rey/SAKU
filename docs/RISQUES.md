@@ -16,9 +16,9 @@ tout le reste du bloc est perdu.
 **Test.** La même archive, créée sur une machine, est décodée à l'identique sur au moins trois
 environnements différents (x86-64 avec et sans AVX-512, ARM64), avec 1 fil et avec N fils.
 
-**Où on en est (2026-11-11).** Le codec 2 (mélange de contextes, sans réseau pré-entraîné)
-est entièrement en entiers ; ses deux implémentations, Python et C, produisent les mêmes
-octets, et la sortie C ne change pas entre `-O0`, `-O2` et `-O3 -march=native`. Le test sur
+**Où on en est (2026-11-11).** Les codecs 2 et 3 (mélange de contextes, sans réseau
+pré-entraîné) sont entièrement en entiers ; pour chacun, les implémentations Python et C
+produisent les mêmes octets, et la sortie C ne change pas entre `-O0`, `-O2` et `-O3`. Le test sur
 ARM64 reste à faire.
 
 **Seuil d'abandon.** Si l'inférence en arithmétique entière coûte plus de la moitié du gain de
@@ -71,9 +71,9 @@ en moins bien rodé. La seule nouveauté prévue est le codec 2.
 **Test.** Sur les corpus de code, le codec de Saku doit battre `xz -9` et `zstd -22 --long`,
 modèle compris, à un débit acceptable.
 
-**Où on en est (2026-11-11).** Le codec 2 bat `xz -9` de 5,1 % sur le code applicatif et
-reste 0,9 % derrière sur CPython, à cause de l'index ; il bat `zstd -22 --long` sur les deux.
-Débit : 0,75 Mo/s, encore trop lent pour un usage quotidien.
+**Où on en est (2026-11-11).** Le codec 3 bat `xz -9` de 14,7 % sur le code applicatif et de
+6,4 % sur CPython, et `zstd -22 --long` de 7,6 % sur CPython, sans modèle externe. Débit :
+environ 0,8 Mo/s, encore trop lent pour un usage quotidien (risque 3).
 
 **Seuil d'abandon.** Si ce n'est pas le cas, le projet s'arrête ou change d'objet. Le
 conteneur seul ne justifie pas un nouveau format.
