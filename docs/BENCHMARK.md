@@ -103,9 +103,23 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
 
 ### cmix et ts_zip
 
-- **cmix** n'a pas fini l'échantillon d'1 Mo de `code-perso` en 5 400 secondes : il est
-  marqué « non mesuré » plutôt qu'estimé.
-- **ts_zip**, sur processeur seul, est en cours de mesure sur les échantillons.
+- **cmix** n'a fini aucun des deux échantillons d'1 Mo en 5 400 secondes : il est marqué
+  « non mesuré » plutôt qu'estimé.
+- **ts_zip** n'a pas fini non plus : sans carte graphique, il avance à **110 octets par
+  seconde** (≈ 2 h 30 par mégaoctet). Mesure ponctuelle sur un seul fichier, les 20 000
+  premiers octets de `src/saku/archive.py`, aller-retour vérifié :
+
+  | Outil | Octets | bits/octet | Débit |
+  |---|---:|---:|---:|
+  | ts_zip (`rwkv_169M_q8`) | 3 304 | 1,322 | 110 o/s |
+  | Saku codec 2 | 5 353 | 2,141 | ≈ 0,75 Mo/s |
+  | xz -9 | 5 996 | 2,398 | — |
+  | zstd -19 | 6 010 | 2,404 | — |
+
+  ts_zip fait 38 % plus petit que le codec 2, mais il est environ 7 000 fois plus lent et son
+  modèle pèse 171 363 973 octets. Modèle compris, il faudrait archiver environ 1,7 Go de texte
+  de ce genre pour que ts_zip passe devant le codec 2 ; c'est ce qui sépare un modèle
+  pré-entraîné d'un modèle appris en ligne, et la cible du réseau en entiers prévu ensuite.
 
 ## Reproduire
 
