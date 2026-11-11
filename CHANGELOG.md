@@ -13,6 +13,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions :
   vecteurs dans `tests/test_cm3.py`. ADR 0003. Le codec 2 reste lisible et s'écrit encore
   avec `--codec cm1`.
 - Option `--taille-bloc` (en Mio) de `saku creer`.
+- **Blocs traités en parallèle** à l'écriture et à la lecture (option `--fils`, paramètre
+  `fils`) : l'archive produite ne dépend pas du nombre de fils. CPython au codec 3 : de
+  0,8 à 7,4 Mo/s en compression, de 0,8 à 8,0 Mo/s en décompression.
+- Codec 3 en C : préchargement des seaux et pages mémoire de 2 Mio, environ +20 % par cœur,
+  octets inchangés.
 - **Codec 2** (`--codec cm`) : mélange de contextes en arithmétique entière, spécifié dans
   `docs/CODEC-2.md`. Référence en Python (`saku.cm_reference`) et version C99
   (`src/saku/_cm/cm.c`, compilée à la première utilisation) qui produisent les mêmes octets ;

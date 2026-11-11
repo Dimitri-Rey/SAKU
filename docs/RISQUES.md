@@ -47,6 +47,10 @@ son ratio.
 **Test.** Débit de compression et de décompression mesuré sur processeur seul, sans carte
 graphique.
 
+**Où on en est (2026-11-11).** Codec 3 : environ 1 Mo/s par cœur dans les deux sens ; les
+blocs se traitent en parallèle, d'où 7,4 Mo/s en compression et 8,0 Mo/s en décompression sur
+CPython avec 48 cœurs. Une archive de un ou deux blocs reste à 1 Mo/s.
+
 **Seuil d'abandon.** À fixer avec le premier prototype ; en dessous de 1 Mo/s en
 décompression sur un processeur courant, Saku ne peut pas servir d'archiveur du quotidien et
 doit se présenter comme un outil d'archivage froid.
@@ -73,7 +77,7 @@ modèle compris, à un débit acceptable.
 
 **Où on en est (2026-11-11).** Le codec 3 bat `xz -9` de 14,7 % sur le code applicatif et de
 6,4 % sur CPython, et `zstd -22 --long` de 7,6 % sur CPython, sans modèle externe. Débit :
-environ 0,8 Mo/s, encore trop lent pour un usage quotidien (risque 3).
+environ 1 Mo/s par cœur, 7 à 8 Mo/s sur `cpython` avec les blocs en parallèle (risque 3).
 
 **Seuil d'abandon.** Si ce n'est pas le cas, le projet s'arrête ou change d'objet. Le
 conteneur seul ne justifie pas un nouveau format.

@@ -13,8 +13,11 @@ chiffre : la ligne porte la raison.
   entrées triées, dates et propriétaires à zéro). Saku reçoit le dossier lui-même.
 - **Vérification.** Pour les outils à tar : SHA-256 du tar décompressé égal à celui du tar
   d'origine. Pour Saku : même liste de fichiers et même SHA-256 pour chacun.
-- **Temps.** Durée murale de la commande, un seul fil pour zstd et xz (`-T1`). Les débits sont
-  en Mo/s (10⁶ octets de données brutes par seconde).
+- **Temps.** Durée murale de la commande, un seul fil pour zstd et xz (`-T1`). Saku traite
+  ses blocs en parallèle, un par cœur dans la limite de la moitié de la mémoire libre (48 fils
+  sur cette machine) ; l'archive produite ne dépend pas du nombre de fils. Les lignes
+  `saku-cm1` ont été mesurées avant le parallélisme, sur un seul fil. Les débits sont en Mo/s
+  (10⁶ octets de données brutes par seconde).
 - **Mémoire.** Pointe de mémoire résidente du processus (`ru_maxrss`), en Mio.
 - **Modèle compris.** Quand le décodeur a besoin d'un modèle, sa taille est ajoutée à celle de
   l'archive dans la colonne « Ratio, modèle compris ». Pour ts_zip : `rwkv_169M_q8.bin`,
@@ -56,11 +59,11 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
 | zstd-19 | 1 787 014 | 1,198 | 6,68 | 6,68 | 3,2 | 375,6 | 98 | 24 |
 | zstd-22-long | 1 783 228 | 1,195 | 6,69 | 6,69 | 1,8 | 378,6 | 282 | 26 |
 | xz-9 | 1 753 708 | 1,175 | 6,81 | 6,81 | 2,8 | 125,9 | 174 | 26 |
-| saku | 1 841 226 | 1,234 | 6,48 | 6,48 | 3,1 | 25,3 | 132 | 54 |
-| saku-chiffre | 1 841 277 | 1,234 | 6,48 | 6,48 | 2,7 | 11,2 | 284 | 284 |
+| saku | 1 841 226 | 1,234 | 6,48 | 6,48 | 5,0 | 27,5 | 175 | 59 |
+| saku-chiffre | 1 841 277 | 1,234 | 6,48 | 6,48 | 3,9 | 10,8 | 285 | 285 |
 | saku-cm1 | 1 664 426 | 1,115 | 7,17 | 7,17 | 0,729 | 0,703 | 136 | 126 |
-| saku-cm | 1 496 457 | 1,003 | 7,98 | 7,98 | 0,836 | 0,802 | 219 | 209 |
-| saku-cm-64 | 1 472 082 | 0,987 | 8,11 | 8,11 | 0,834 | 0,815 | 228 | 211 |
+| saku-cm | 1 496 457 | 1,003 | 7,98 | 7,98 | 1,5 | 1,4 | 381 | 380 |
+| saku-cm-64 | 1 472 082 | 0,987 | 8,11 | 8,11 | 1,1 | 1,0 | 216 | 212 |
 
 **cpython — 5 045 fichiers, 112 691 061 octets**
 
@@ -69,11 +72,11 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
 | zstd-19 | 23 971 699 | 1,702 | 4,70 | 4,70 | 2,1 | 649,7 | 206 | 40 |
 | zstd-22-long | 23 200 760 | 1,647 | 4,86 | 4,86 | 1,4 | 425,3 | 846 | 115 |
 | xz-9 | 22 909 784 | 1,626 | 4,92 | 4,92 | 2,1 | 101,9 | 674 | 67 |
-| saku | 24 384 040 | 1,731 | 4,62 | 4,62 | 2,5 | 45,1 | 147 | 73 |
-| saku-chiffre | 24 384 168 | 1,731 | 4,62 | 4,62 | 2,6 | 35,9 | 284 | 284 |
+| saku | 24 384 040 | 1,731 | 4,62 | 4,62 | 18,5 | 46,4 | 1 265 | 279 |
+| saku-chiffre | 24 384 168 | 1,731 | 4,62 | 4,62 | 15,8 | 34,7 | 1 265 | 300 |
 | saku-cm1 | 23 107 271 | 1,640 | 4,88 | 4,88 | 0,771 | 0,765 | 150 | 146 |
-| saku-cm | 21 449 035 | 1,523 | 5,25 | 5,25 | 0,775 | 0,789 | 233 | 226 |
-| saku-cm-64 | 21 006 955 | 1,491 | 5,36 | 5,36 | 0,785 | 0,789 | 347 | 303 |
+| saku-cm | 21 449 035 | 1,523 | 5,25 | 5,25 | 7,4 | 8,0 | 2 676 | 2 689 |
+| saku-cm-64 | 21 006 955 | 1,491 | 5,36 | 5,36 | 1,7 | 1,6 | 666 | 667 |
 
 <!--/MESURES-->
 
@@ -86,10 +89,15 @@ Les échantillons existent parce que cmix et ts_zip sont trop lents pour les cor
   21 449 035 octets, 6,4 % de moins que `xz -9` et 7,6 % de moins que
   `zstd --ultra -22 --long`.
 - **Face au codec 2** : −10,1 % sur `code-perso`, −7,2 % sur `cpython`, à vitesse égale.
-- **Blocs de 64 Mio** (`--taille-bloc 64`) : −16,1 % et −8,3 % face à `xz -9`, au prix de
-  347 Mio de mémoire à la compression de `cpython`.
-- **Le prix reste la vitesse** : 0,78 à 0,84 Mo/s dans les deux sens, contre 2 à 650 Mo/s
-  pour zstd et xz. Mémoire de pointe : environ 230 Mio en blocs de 8 Mio.
+- **Blocs de 64 Mio** (`--taille-bloc 64`) : −16,1 % et −8,3 % face à `xz -9`.
+- **Vitesse** : un bloc avance à environ 1 Mo/s sur un cœur (préchargement des seaux et pages
+  mémoire de 2 Mio), et les blocs se traitent en parallèle. Sur `cpython` (14 blocs de 8 Mio) :
+  **7,4 Mo/s en compression, 8,0 Mo/s en décompression**, plus vite que `xz -9` sur un fil
+  en compression, mais douze fois plus lent en décompression. Le débit dépend du nombre de
+  blocs : `code-perso` n'en a que deux (1,4 Mo/s), et en blocs de 64 Mio `cpython` n'en a
+  que deux (1,7 Mo/s). Plus l'archive est grosse, plus il y a de blocs à traiter ensemble.
+- **Mémoire** : environ 190 Mio par bloc en cours ; 2,7 Gio pour `cpython` avec 14 blocs
+  simultanés.
 - **Aucun modèle externe** : la colonne « modèle compris » est égale au ratio.
 
 ### Codec 2 (`saku-cm1`, `--codec cm1`)

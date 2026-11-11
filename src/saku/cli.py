@@ -26,17 +26,26 @@ def _demander_mot_de_passe(confirmer: bool = False) -> str:
     return mot
 
 
-def _ouvrir_archive(chemin: Path) -> Archive:
+def _ouvrir_archive(chemin: Path, fils: int | None) -> Archive:
     """Ouvre une archive, en demandant le mot de passe seulement si elle est chiffree."""
     try:
-        return Archive.ouvrir(chemin)
+        return Archive.ouvrir(chemin, fils=fils)
     except MotDePasseRequis:
-        return Archive.ouvrir(chemin, _demander_mot_de_passe())
+        return Archive.ouvrir(chemin, _demander_mot_de_passe(), fils=fils)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Point d'entree CLI."""
     parser = argparse.ArgumentParser(prog="saku", description="Archiveur saku")
+    parser.add_argument(
+        "--fils",
+        type=int,
+        default=None,
+        metavar="N",
+        help="blocs traités en parallèle (par défaut : un par cœur, dans la limite de la "
+        "moitié de la mémoire libre) ; "
+        "l'archive produite n'en dépend pas",
+    )
     sous = parser.add_subparsers(dest="commande", required=True)
 
     p_creer = sous.add_parser("creer", help="Creer une archive")
@@ -83,16 +92,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 niveau=args.niveau,
                 codec=args.codec,
                 taille_bloc=args.taille_bloc * 1024 * 1024,
+                fils=args.fils,
             )
         elif args.commande == "extraire":
-            with _ouvrir_archive(args.archive) as archive:
+            with _ouvrir_archive(args.archive, args.fils) as archive:
                 archive.extraire(args.C, args.chemins or None)
         elif args.commande == "lister":
-            with _ouvrir_archive(args.archive) as archive:
+            with _ouvrir_archive(args.archive, args.fils) as archive:
                 for f in archive.fichiers:
                     print(f"{f.taille:>12}  {f.chemin}")
         elif args.commande == "verifier":
-            with _ouvrir_archive(args.archive) as archive:
+            with _ouvrir_archive(args.archive, args.fils) as archive:
                 archive.verifier()
                 print(f"archive valide : {len(archive.fichiers)} fichier(s)")
     except (ErreurSaku, OSError, ValueError) as exc:

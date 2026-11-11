@@ -208,7 +208,7 @@
 
 <div class="col">
 <section class="revele">
-  <p class="note">Prototype. Le <strong>codec 3</strong>, un mélange de contextes calculé uniquement en nombres entiers, sans modèle externe, bat <span class="mono">xz -9</span> de 14,7 % sur un corpus de code applicatif et de 6,4 % sur les sources de CPython, à environ 0,8 Mo/s. Le réseau de neurones pré-entraîné n'est pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
+  <p class="note">Prototype. Le <strong>codec 3</strong>, un mélange de contextes calculé uniquement en nombres entiers, sans modèle externe, bat <span class="mono">xz -9</span> de 14,7 % sur un corpus de code applicatif et de 6,4 % sur les sources de CPython, à 7 à 8 Mo/s sur 48 cœurs. Le réseau de neurones pré-entraîné n'est pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie d'un fichier.</p>
   <h3>Ce que Saku ne promettra jamais</h3>
   <ul class="net">
     <li><strong>Un ratio universel.</strong> Réduire n'importe quel gigaoctet à un mégaoctet est impossible : il n'existe pas assez de petits fichiers pour représenter tous les gros. Des données déjà compressées ou aléatoires ne rétrécissent pas.</li>
@@ -364,7 +364,8 @@
     <li class="fait">Codec 2 : mélange de contextes en entiers, Python et C identiques octet pour octet</li>
     <li>Reproductibilité prouvée sur ARM64</li>
     <li class="fait">Codec 3 : seaux vérifiés, contexte « mot », raffinement des probabilités</li>
-    <li>Codec plus rapide : au-dessus de 1 Mo/s en décompression</li>
+    <li class="fait">Blocs traités en parallèle, 1 Mo/s par cœur pour le codec 3</li>
+    <li>Décompression du codec 3 plus rapide, aussi pour les petites archives</li>
     <li>Réseau de neurones pré-entraîné, en arithmétique entière</li>
     <li>Conteneurs déjà compressés (.docx, .zip, JPEG) reconstruits à l'identique</li>
     <li>Correction d'erreurs, clé enveloppée, ajout de fichiers</li>

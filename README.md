@@ -43,7 +43,7 @@ chiffrement authentifié, accès direct aux fichiers, lecteur durci.
 > **État actuel : prototype.** Le conteneur, le chiffrement, les tests et le banc de mesure
 > sont en place. Le **codec 3** (mélange de contextes en arithmétique entière, sans modèle
 > externe) bat `xz -9` de 14,7 % sur un corpus de code applicatif et de 6,4 % sur les sources
-> de CPython, à environ 0,8 Mo/s. Le réseau de neurones pré-entraîné n'est
+> de CPython, à 7 à 8 Mo/s sur une machine à 48 cœurs (blocs traités en parallèle). Le réseau de neurones pré-entraîné n'est
 > pas encore écrit. Le format peut encore changer : ne confiez pas à Saku la seule copie
 > d'un fichier.
 
@@ -169,17 +169,18 @@ seul. Chaque ligne est vérifiée par un aller-retour octet pour octet.
 | `xz -9` | 22 909 784 | 1,626 | 4,92 | 2,1 Mo/s | 101,9 Mo/s |
 | `zstd --ultra -22 --long=27` | 23 200 760 | 1,647 | 4,86 | 1,4 Mo/s | 425,3 Mo/s |
 | `zstd -19` | 23 971 699 | 1,702 | 4,70 | 2,1 Mo/s | 649,7 Mo/s |
-| **Saku, codec 3** | **21 449 035** | **1,523** | **5,25** | **0,8 Mo/s** | **0,8 Mo/s** |
-| Saku, codec 3, blocs de 64 Mio | 21 006 955 | 1,491 | 5,36 | 0,8 Mo/s | 0,8 Mo/s |
+| **Saku, codec 3** | **21 449 035** | **1,523** | **5,25** | **7,4 Mo/s** | **8,0 Mo/s** |
+| Saku, codec 3, blocs de 64 Mio | 21 006 955 | 1,491 | 5,36 | 1,7 Mo/s | 1,6 Mo/s |
 | Saku, codec 2 | 23 107 271 | 1,640 | 4,88 | 0,8 Mo/s | 0,8 Mo/s |
-| Saku, zstd | 24 384 040 | 1,731 | 4,62 | 2,5 Mo/s | 45,1 Mo/s |
-| Saku, zstd, chiffré | 24 384 168 | 1,731 | 4,62 | 2,6 Mo/s | 35,9 Mo/s |
+| Saku, zstd | 24 384 040 | 1,731 | 4,62 | 18,5 Mo/s | 46,4 Mo/s |
+| Saku, zstd, chiffré | 24 384 168 | 1,731 | 4,62 | 15,8 Mo/s | 34,7 Mo/s |
 
 Ce que ça montre, sans enjoliver :
 
 - **Codec 3** : **6,4 % de moins que `xz -9`** (8,3 % en blocs de 64 Mio), et 7,2 % de moins
   que le codec 2. Sur le second corpus (code applicatif, 11,9 Mo), il bat `xz -9` de
-  **14,7 %**. Le prix : environ 0,8 Mo/s, cent fois plus lent que xz à la décompression.
+  **14,7 %**. Saku traite ses blocs en parallèle (xz et zstd sont mesurés sur un fil) : il
+  compresse plus vite que `xz -9`, mais décompresse douze fois plus lentement.
 - **Avec zstd** (par défaut) : 1,7 % derrière `zstd -19`, pour les mêmes raisons d'index et
   de blocs indépendants. Chiffrer coûte **128 octets**.
 
@@ -195,7 +196,8 @@ Protocole, machine, second corpus, mémoire consommée, cmix et ts_zip :
 - [x] Sortie identique quel que soit le niveau d'optimisation du compilateur
 - [ ] Reproductibilité prouvée sur une autre architecture (ARM64)
 - [x] Codec 3 : seaux vérifiés, contexte « mot », raffinement des probabilités (APM)
-- [ ] Codec plus rapide : au-dessus de 1 Mo/s en décompression
+- [x] Blocs traités en parallèle ; 1 Mo/s par cœur pour le codec 3
+- [ ] Décompression du codec 3 plus rapide : vitesse d'un bloc, archives à peu de blocs
 - [ ] **Réseau de neurones pré-entraîné, en arithmétique entière** — taille du modèle comprise
 - [ ] Conteneurs déjà compressés (.docx, .zip, JPEG) déballés et reconstruits à l'identique
 - [ ] Correction d'erreurs, clé enveloppée, ajout de fichiers
@@ -209,7 +211,7 @@ n'a pas de raison d'exister. Les conditions d'abandon sont écrites à l'avance 
 
 ```
 src/saku/      la bibliothèque et la commande saku
-tests/         117 tests, dont les archives hostiles et la conformité des codecs 2 et 3
+tests/         122 tests, dont les archives hostiles et la conformité des codecs 2 et 3
 bench/         le banc de mesure (corpus et outils externes non versionnés)
 docs/          spécification du format, mesures, risques, décisions (adr/)
 site/          page de présentation statique

@@ -255,3 +255,36 @@ def test_chemins_en_texte(arbre: Path, tmp_path: Path, monkeypatch: pytest.Monke
         archive.verifier()
         archive.extraire("sortie")
     assert (tmp_path / "sortie" / arbre.name / "LISEZMOI.md").exists()
+
+
+@pytest.mark.parametrize("codec", ["zstd", "cm"])
+def test_fils_sans_effet_sur_l_archive(arbre: Path, tmp_path: Path, codec: str) -> None:
+    """Compresser sur 1 ou 4 fils donne la même archive au bit près ; la lecture aussi."""
+    archives = []
+    for fils in (1, 4):
+        dest = tmp_path / f"archive-{fils}.saku"
+        creer_archive(dest, [arbre], taille_bloc=TAILLE_BLOC_TEST, codec=codec, fils=fils)
+        archives.append(dest.read_bytes())
+        with Archive.ouvrir(dest, fils=fils) as archive:
+            assert len(archive._blocs) > 4  # assez de blocs pour occuper les fils
+            archive.verifier()
+            archive.extraire(tmp_path / f"sortie-{fils}")
+    assert archives[0] == archives[1]
+    _verifier_aller_retour(arbre, tmp_path / "archive-4.saku")
+
+
+def test_lecture_partielle_en_parallele(arbre: Path, tmp_path: Path) -> None:
+    """Lire un seul fichier, puis tout, avec lecture anticipée : contenus exacts."""
+    dest = tmp_path / "archive.saku"
+    creer_archive(dest, [arbre], taille_bloc=TAILLE_BLOC_TEST)
+    with Archive.ouvrir(dest, fils=4) as archive:
+        dernier = archive.fichiers[-1]
+        attendu = (arbre.parent / dernier.chemin).read_bytes()
+        assert archive.lire(dernier.chemin) == attendu
+        for fichier in archive.fichiers:
+            assert archive.lire(fichier.chemin) == (arbre.parent / fichier.chemin).read_bytes()
+
+
+def test_fils_invalide(arbre: Path, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fils"):
+        creer_archive(tmp_path / "x.saku", [arbre], fils=0)

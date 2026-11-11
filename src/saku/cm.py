@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from types import ModuleType
 
@@ -41,6 +42,9 @@ class _Moteur:
         self.reference = reference
         self._bibliotheque: ctypes.CDLL | None = None
         self._essaye = False
+        # Plusieurs fils compressent en meme temps : un seul charge, les autres attendent.
+        # Sans ce verrou, un fil arrive pendant le chargement et se rabat sur la reference.
+        self._verrou = threading.Lock()
 
     def _compiler(self) -> Path | None:
         compilateur = shutil.which(os.environ.get("CC", "cc"))
@@ -71,7 +75,13 @@ class _Moteur:
     def _charger(self) -> ctypes.CDLL | None:
         if self._essaye:
             return self._bibliotheque
-        self._essaye = True
+        with self._verrou:
+            if not self._essaye:
+                self._bibliotheque = self._charger_sans_verrou()
+                self._essaye = True
+        return self._bibliotheque
+
+    def _charger_sans_verrou(self) -> ctypes.CDLL | None:
         if os.environ.get("SAKU_CM") == "reference":
             return None
         chemin = self._compiler()
@@ -101,7 +111,6 @@ class _Moteur:
         if version() != self.version:
             journal.warning("%s : version C inattendue, référence Python utilisée", self.prefixe)
             return None
-        self._bibliotheque = bib
         return bib
 
     def disponible(self) -> bool:

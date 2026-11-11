@@ -127,3 +127,21 @@ def test_empreintes():
         assert hashlib.sha256(cm_ref.compresser(clair)).hexdigest() == attendue
         if cm.disponible():
             assert hashlib.sha256(cm.compresser_c(clair)).hexdigest() == attendue
+
+
+def test_chargement_concurrent():
+    """Huit fils qui chargent le codec en même temps obtiennent tous la version C.
+
+    Régression : sans verrou, un fil arrivé pendant le chargement se rabattait sur la
+    référence Python, juste mais des centaines de fois plus lente.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from saku.cm import _Moteur
+
+    if not cm.disponible():
+        pytest.skip("bibliothèque C non disponible")
+    moteur = _Moteur("cm3.c", "saku_cm3", 2, cm_ref)
+    with ThreadPoolExecutor(8) as executeur:
+        resultats = list(executeur.map(lambda _: moteur.disponible(), range(8)))
+    assert all(resultats)

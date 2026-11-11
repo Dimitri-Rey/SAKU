@@ -1,6 +1,10 @@
 /* Saku, codec 3 : mélange de contextes en arithmétique entière (version 2).
  * Spécification : docs/CODEC-3.md (elle fait autorité). Aucune virgule flottante.
  * Doit produire exactement les mêmes octets que src/saku/cm3_reference.py. */
+#if defined(__linux__)
+#define _DEFAULT_SOURCE
+#include <sys/mman.h>
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -13,6 +17,11 @@
 #define TAUX 6
 #define NH 4 /* ordres hachés : 2, 3, 4, 6 */
 #define NE (5 + NH) /* O0, O1, hachés, mot, corresp., biais */
+#if defined(__GNUC__)
+#define PREFETCH(p) __builtin_prefetch(p)
+#else
+#define PREFETCH(p) ((void)0)
+#endif
 #define TAILLE_MT (1u << 20)
 #define INITIAL ((uint32_t)(1u << 21) << 10)
 
@@ -45,6 +54,21 @@ typedef struct {
     int32_t x[NE];
     int32_t p, pm;
 } Etat;
+
+/* Grandes tables : pages de 2 Mio quand le système le permet (moins de défauts de page et de
+ * défauts de TLB). Sans effet sur les octets produits. Mémoire mise à zéro. */
+static void *grande_table(size_t taille) {
+#if defined(__linux__) && defined(MADV_HUGEPAGE)
+    void *p = NULL;
+    size_t arrondi = (taille + (2u << 20) - 1) & ~(size_t)((2u << 20) - 1);
+    if (posix_memalign(&p, 2u << 20, arrondi) != 0) return NULL;
+    madvise(p, arrondi, MADV_HUGEPAGE);
+    memset(p, 0, taille);
+    return p;
+#else
+    return calloc(1, taille);
+#endif
+}
 
 static int64_t asr(int64_t x, int n) { return x >= 0 ? x >> n : ~((~x) >> n); }
 static int32_t borner(int64_t x, int64_t a, int64_t b) { return (int32_t)(x < a ? a : (x > b ? b : x)); }
@@ -89,10 +113,14 @@ static void hacher(Etat *et) {
 }
 
 /* Seau de 16 compteurs (case 0 = vérification) pour le demi-octet courant ; deux voies. */
+static uint32_t melanger(uint32_t x) {
+    x = x * 0x9E3779B1u; x ^= x >> 15; x *= 0x2545F491u; x ^= x >> 13;
+    return x;
+}
+
 static uint32_t *trouver(uint32_t *tab, uint32_t x) {
     uint32_t chk, i, *a, *b, *r;
     int j;
-    x = x * 0x9E3779B1u; x ^= x >> 15; x *= 0x2545F491u; x ^= x >> 13;
     i = x >> (32 - LOGB);
     chk = (x & 0x00FFFFFFu) | 0x01000000u;
     a = tab + (size_t)i * 16; b = tab + (size_t)(i ^ 1u) * 16;
@@ -106,8 +134,15 @@ static uint32_t *trouver(uint32_t *tab, uint32_t x) {
 
 static void seaux(Etat *et) {
     int k;
-    uint32_t n = et->bp == 0 ? 0u : (et->c0 * 0x6F4F2A35u);
-    for (k = 0; k < NH + 1; k++) et->seau[k] = trouver(et->H[k], et->h[k] + n);
+    uint32_t n = et->bp == 0 ? 0u : (et->c0 * 0x6F4F2A35u), x[NH + 1];
+    /* Demander les seaux à la mémoire tous ensemble avant de les lire : les défauts de
+     * cache se recouvrent au lieu de s'additionner. Sans effet sur les octets produits. */
+    for (k = 0; k < NH + 1; k++) {
+        x[k] = melanger(et->h[k] + n);
+        PREFETCH(et->H[k] + (size_t)((x[k] >> (32 - LOGB)) & ~1u) * 16);
+        PREFETCH(et->H[k] + (size_t)((x[k] >> (32 - LOGB)) & ~1u) * 16 + 16);
+    }
+    for (k = 0; k < NH + 1; k++) et->seau[k] = trouver(et->H[k], x[k]);
 }
 
 static int initialiser(Etat *et, const uint8_t *buf) {
@@ -118,8 +153,8 @@ static int initialiser(Etat *et, const uint8_t *buf) {
     for (i = 0; i < 256; i++) et->O0[i] = INITIAL;
     for (i = 0; i < 65536; i++) et->O1[i] = INITIAL;
     for (i = 0; i < 64; i++) et->MM[i] = INITIAL;
-    for (k = 0; k < NH + 1; k++) { et->H[k] = calloc((size_t)16 << LOGB, sizeof(uint32_t)); if (!et->H[k]) return -1; }
-    et->MT = calloc(TAILLE_MT, sizeof(uint32_t));
+    for (k = 0; k < NH + 1; k++) { et->H[k] = grande_table(((size_t)16 << LOGB) * sizeof(uint32_t)); if (!et->H[k]) return -1; }
+    et->MT = grande_table(TAILLE_MT * sizeof(uint32_t));
     if (!et->MT) return -1;
     for (i = 0; i < 1024; i++) for (k = 0; k < NE; k++) et->W[i][k] = 16384;
     for (i = 0; i < 256; i++) for (k = 0; k < 33; k++) et->A1[i * 33 + k] = (uint16_t)(squash((k - 16) * 128) * 16);

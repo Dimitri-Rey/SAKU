@@ -18,7 +18,9 @@ import stat
 import struct
 import tempfile
 import zlib
-from collections.abc import Iterator, Sequence
+from collections import deque
+from collections.abc import Iterable, Iterator, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -44,6 +46,38 @@ CODEC_CM1 = 2
 CODEC_CM = 3
 CODECS = {"zstd": CODEC_ZSTD, "cm": CODEC_CM, "cm1": CODEC_CM1}
 _MORCEAU_LECTURE = 1 << 20
+MEMOIRE_PAR_FIL = 256 << 20  # codec 3 : environ 230 Mio par bloc en cours
+
+
+def _memoire_disponible() -> int | None:
+    """Memoire disponible (MemAvailable sous Linux), ou None si inconnue."""
+    try:
+        with open("/proc/meminfo", encoding="ascii") as meminfo:
+            for ligne in meminfo:
+                if ligne.startswith("MemAvailable:"):
+                    return int(ligne.split()[1]) * 1024
+    except OSError, ValueError, IndexError:
+        pass
+    return None
+
+
+def fils_par_defaut() -> int:
+    """Blocs traites en meme temps : un par coeur, sans depasser la moitie de la memoire libre."""
+    fils = os.cpu_count() or 1
+    memoire = _memoire_disponible()
+    if memoire is not None:
+        fils = min(fils, memoire // 2 // MEMOIRE_PAR_FIL)
+    return max(1, fils)
+
+
+def _compresser_bloc(codec: int, clair: bytes, niveau: int) -> tuple[int, bytes]:
+    """Compresse un bloc de données ; repli « stocké » si la compression ne gagne rien."""
+    charge = compresser(codec, clair, niveau)
+    if len(charge) >= len(clair):
+        return CODEC_STOCKE, clair
+    return codec, charge
+
+
 _PREFIXE_TEMPORAIRE = ".saku-"
 
 
@@ -125,30 +159,55 @@ def _collecter(sources: Sequence[Path]) -> list[tuple[Path, str]]:
 
 
 class _Ecrivain:
-    """Ecrit les blocs l'un apres l'autre et tient la liste destinee a l'index."""
+    """Ecrit les blocs dans l'ordre et tient la liste destinee a l'index.
+
+    Les blocs sont compresses en parallele (`fils` a la fois) mais ecrits dans l'ordre ou ils
+    arrivent : l'archive est la meme au bit pres quel que soit le nombre de fils. Le codec C
+    et zstd relachent le GIL pendant le calcul.
+    """
 
     def __init__(
-        self, sortie: BinaryIO, entete: bytes, cle: bytes | None, niveau: int, codec: int
+        self,
+        sortie: BinaryIO,
+        entete: bytes,
+        cle: bytes | None,
+        niveau: int,
+        codec: int,
+        executeur: ThreadPoolExecutor,
+        fils: int,
     ) -> None:
         self._sortie = sortie
         self._entete = entete
         self._cle = cle
         self._niveau = niveau
         self._codec = codec
+        self._executeur = executeur
+        self._fils = fils
+        self._en_cours: deque[tuple[int, Future[tuple[int, bytes]]]] = deque()
         self.blocs: list[dict[str, int]] = []
         sortie.write(entete)
 
     def ecrire_donnees(self, clair: bytes) -> None:
-        """Ecrit un bloc de donnees, en repli « stocke » si la compression ne gagne rien."""
-        charge = compresser(self._codec, clair, self._niveau)
-        id_codec = self._codec
-        if len(charge) >= len(clair):
-            charge, id_codec = clair, CODEC_STOCKE
-        position = self._ecrire(TYPE_DONNEES, id_codec, len(clair), charge, len(self.blocs))
-        self.blocs.append({"position": position, "taille_claire": len(clair), "id_codec": id_codec})
+        """Confie un bloc de donnees a un fil ; ecrit les plus anciens quand la file est pleine."""
+        travail = self._executeur.submit(_compresser_bloc, self._codec, clair, self._niveau)
+        self._en_cours.append((len(clair), travail))
+        while len(self._en_cours) > self._fils:
+            self._ecrire_le_plus_ancien()
+
+    def vider(self) -> None:
+        """Ecrit tous les blocs encore en cours, dans l'ordre."""
+        while self._en_cours:
+            self._ecrire_le_plus_ancien()
+
+    def _ecrire_le_plus_ancien(self) -> None:
+        taille, travail = self._en_cours.popleft()
+        id_codec, charge = travail.result()
+        position = self._ecrire(TYPE_DONNEES, id_codec, taille, charge, len(self.blocs))
+        self.blocs.append({"position": position, "taille_claire": taille, "id_codec": id_codec})
 
     def ecrire_index(self, clair: bytes) -> int:
         """Ecrit le bloc d'index (toujours en zstd) et rend sa position."""
+        self.vider()
         if len(clair) > TAILLE_INDEX_MAX:
             raise SourceInvalide("trop de fichiers : l'index dépasse 1 Gio")
         charge = compresser(CODEC_ZSTD, clair, self._niveau)
@@ -196,6 +255,7 @@ def creer_archive(
     niveau: int = 19,
     argon2: ParametresArgon2 | None = None,
     codec: str = "zstd",
+    fils: int | None = None,
 ) -> None:
     """Cree l'archive `destination` a partir de fichiers ou de dossiers.
 
@@ -206,11 +266,16 @@ def creer_archive(
 
     `codec` : "zstd" (rapide), "cm" (codec 3, plus compact, bien plus lent) ou "cm1"
     (codec 2, l'ancienne version du mélange de contextes, gardée pour comparaison).
+    `fils` : blocs compressés en même temps (par défaut `fils_par_defaut()`) ; l'archive
+    produite ne dépend pas de ce nombre.
     """
     destination = Path(destination)
     sources = [Path(source) for source in sources]
     if codec not in CODECS:
         raise ValueError(f"codec inconnu : {codec} (attendu : {', '.join(CODECS)})")
+    fils = fils_par_defaut() if fils is None else fils
+    if fils < 1:
+        raise ValueError("fils doit valoir au moins 1")
     if destination.exists():
         raise FileExistsError(f"la destination existe déjà : {destination}")
     if mot_de_passe is not None and not mot_de_passe:
@@ -245,11 +310,14 @@ def creer_archive(
         dir=destination.parent, prefix=_PREFIXE_TEMPORAIRE, delete=False
     ) as sortie:
         temporaire = Path(sortie.name)
+        # Les fils ne demarrent qu'au premier bloc ; arretes dans le finally ci-dessous.
+        executeur = ThreadPoolExecutor(fils, thread_name_prefix="saku")
         try:
-            ecrivain = _Ecrivain(sortie, entete_octets, cle, niveau, CODECS[codec])
+            ecrivain = _Ecrivain(sortie, entete_octets, cle, niveau, CODECS[codec], executeur, fils)
             # Un bloc ne melange jamais textes et autres : un codec par groupe.
             for _, groupe in itertools.groupby(analysees, key=lambda s: s.texte):
                 _remplir_blocs(ecrivain, list(groupe), taille_bloc)
+            ecrivain.vider()  # positions definitives avant de construire l'index
             index = {
                 "blocs": ecrivain.blocs,
                 "fichiers": [vars(s.description) for s in analysees],
@@ -260,6 +328,7 @@ def creer_archive(
             os.fsync(sortie.fileno())
             _publier(temporaire, destination)
         finally:
+            executeur.shutdown(cancel_futures=True)
             temporaire.unlink(missing_ok=True)
 
 
@@ -356,9 +425,15 @@ class _Bloc:
 class Archive:
     """Archive ouverte en lecture. S'utilise avec `with Archive.ouvrir(...) as archive:`."""
 
-    def __init__(self, flux: BinaryIO, mot_de_passe: str | None) -> None:
+    def __init__(self, flux: BinaryIO, mot_de_passe: str | None, fils: int | None = None) -> None:
         self._flux = flux
         self._cache: tuple[int, bytes] | None = None
+        self._fils = fils_par_defaut() if fils is None else fils
+        if self._fils < 1:
+            raise ValueError("fils doit valoir au moins 1")
+        self._executeur: ThreadPoolExecutor | None = None
+        self._avance: dict[int, Future[bytes]] = {}
+        self._plan: deque[int] = deque()
         taille = os.fstat(flux.fileno()).st_size
         if taille < TAILLE_ENTETE + TAILLE_ENTETE_BLOC + TAILLE_PIED:
             raise ArchiveInvalide("fichier trop court pour être une archive Saku")
@@ -405,15 +480,24 @@ class Archive:
         self._par_chemin = {f.chemin: f for f in self._fichiers}
 
     @classmethod
-    def ouvrir(cls, chemin: str | os.PathLike[str], mot_de_passe: str | None = None) -> Archive:
+    def ouvrir(
+        cls,
+        chemin: str | os.PathLike[str],
+        mot_de_passe: str | None = None,
+        *,
+        fils: int | None = None,
+    ) -> Archive:
         """Ouvre et valide l'archive : en-tete, pied, index, en-tete de chaque bloc.
+
+        `fils` : blocs decompresses a l'avance en parallele pendant une lecture
+        (par defaut `fils_par_defaut()`).
 
         Leve `ArchiveInvalide`, `EchecAuthentification` (mauvais mot de passe ou archive
         modifiee) ou `MotDePasseRequis`.
         """
         flux = Path(chemin).open("rb")  # noqa: SIM115 — fermé par Archive.fermer()
         try:
-            return cls(flux, mot_de_passe)
+            return cls(flux, mot_de_passe, fils)
         except BaseException:
             flux.close()
             raise
@@ -421,11 +505,16 @@ class Archive:
     # ------------------------------------------------------------------ acces bas niveau
 
     def _lire_a(self, position: int, taille: int) -> bytes:
-        self._flux.seek(position)
-        donnees = self._flux.read(taille)
-        if len(donnees) != taille:
-            raise ArchiveInvalide("archive tronquée")
-        return donnees
+        # pread ne deplace pas de curseur partage : sur pour plusieurs fils a la fois.
+        morceaux = []
+        while taille > 0:
+            donnees = os.pread(self._flux.fileno(), taille, position)
+            if not donnees:
+                raise ArchiveInvalide("archive tronquée")
+            morceaux.append(donnees)
+            position += len(donnees)
+            taille -= len(donnees)
+        return b"".join(morceaux)
 
     def _dechiffrer_et_decompresser(
         self, position: int, entete: EnTeteBloc, octets_entete: bytes, numero: int
@@ -468,15 +557,50 @@ class Archive:
             raise ArchiveInvalide("index : blocs non contigus")
         return tuple(blocs)
 
+    def _ouvrir_bloc(self, numero: int) -> bytes:
+        bloc = self._blocs[numero]
+        return self._dechiffrer_et_decompresser(
+            bloc.position, bloc.entete, bloc.octets_entete, numero
+        )
+
     def _clair_du_bloc(self, numero: int) -> bytes:
-        """Rend le clair d'un bloc de donnees ; garde le dernier lu, et lui seul, en memoire."""
+        """Rend le clair d'un bloc de donnees ; garde le dernier lu, et lui seul, en memoire.
+
+        Un bloc prepare a l'avance (voir `_planifier`) est pris tel quel ; son erreur
+        eventuelle (CRC, authentification, decompression) remonte ici, a son tour.
+        """
         if self._cache is None or self._cache[0] != numero:
-            bloc = self._blocs[numero]
-            clair = self._dechiffrer_et_decompresser(
-                bloc.position, bloc.entete, bloc.octets_entete, numero
-            )
+            travail = self._avance.pop(numero, None)
+            clair = travail.result() if travail is not None else self._ouvrir_bloc(numero)
             self._cache = (numero, clair)
+            self._alimenter()
         return self._cache[1]
+
+    def _planifier(self, fichiers: Iterable[FichierArchive]) -> None:
+        """Annonce les blocs qui vont etre lus, dans l'ordre, pour les preparer en parallele."""
+        if self._fils <= 1:
+            return
+        numeros: dict[int, None] = {}
+        for fichier in fichiers:
+            if fichier.taille == 0:
+                continue
+            debut = self._debuts_fichiers[fichier.chemin]
+            premier = bisect.bisect_right(self._debuts_blocs, debut) - 1
+            dernier = bisect.bisect_right(self._debuts_blocs, debut + fichier.taille - 1) - 1
+            numeros.update(dict.fromkeys(range(premier, dernier + 1)))
+        for numero in [n for n in self._avance if n not in numeros]:
+            self._avance.pop(numero).cancel()
+        self._plan = deque(n for n in numeros if n not in self._avance)
+        self._alimenter()
+
+    def _alimenter(self) -> None:
+        while self._plan and len(self._avance) < self._fils:
+            numero = self._plan.popleft()
+            if self._cache is not None and self._cache[0] == numero:
+                continue
+            if self._executeur is None:
+                self._executeur = ThreadPoolExecutor(self._fils, thread_name_prefix="saku")
+            self._avance[numero] = self._executeur.submit(self._ouvrir_bloc, numero)
 
     def _morceaux(self, fichier: FichierArchive) -> Iterator[bytes]:
         """Rend le contenu d'un fichier bloc par bloc, sans jamais le rendre non verifie.
@@ -514,10 +638,13 @@ class Archive:
 
     def lire(self, chemin: str) -> bytes:
         """Rend le contenu d'un fichier, empreinte verifiee ; ne lit que les blocs utiles."""
-        return b"".join(self._morceaux(self._trouver(chemin)))
+        fichier = self._trouver(chemin)
+        self._planifier([fichier])
+        return b"".join(self._morceaux(fichier))
 
     def verifier(self) -> None:
         """Relit tout : chaque bloc (CRC, authentification, decompression), chaque empreinte."""
+        self._planifier(self._fichiers)
         for fichier in self._fichiers:
             for _ in self._morceaux(fichier):
                 pass
@@ -534,9 +661,10 @@ class Archive:
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         racine = destination.resolve(strict=True)
-        for fichier in self._fichiers:
-            if voulus is None or fichier.chemin in voulus:
-                self._extraire_un(racine, fichier)
+        a_extraire = [f for f in self._fichiers if voulus is None or f.chemin in voulus]
+        self._planifier(a_extraire)
+        for fichier in a_extraire:
+            self._extraire_un(racine, fichier)
 
     def _extraire_un(self, racine: Path, fichier: FichierArchive) -> None:
         *dossiers, nom = fichier.chemin.split("/")
@@ -562,8 +690,13 @@ class Archive:
                 temporaire.unlink()
 
     def fermer(self) -> None:
-        """Ferme le fichier d'archive."""
+        """Ferme le fichier d'archive et arrete les fils de lecture anticipee."""
         self._cache = None
+        self._plan.clear()
+        self._avance.clear()
+        if self._executeur is not None:
+            self._executeur.shutdown(wait=True, cancel_futures=True)
+            self._executeur = None
         self._flux.close()
 
     def __enter__(self) -> Archive:

@@ -112,9 +112,12 @@ def donnees_json(resultats: list[dict]) -> str:
 
 
 def main() -> int:
-    resultats: list[dict] = []
+    # Un fichier plus loin dans la liste remplace la mesure (corpus, outil) d'un précédent.
+    par_cle: dict[tuple[str, str], dict] = {}
     for fichier in sys.argv[1:]:
-        resultats += json.loads(Path(fichier).read_text())["resultats"]
+        for resultat in json.loads(Path(fichier).read_text())["resultats"]:
+            par_cle[resultat["corpus"], resultat["outil"]] = resultat
+    resultats = list(par_cle.values())
     if not resultats:
         raise SystemExit(__doc__)
     doc = RACINE / "docs" / "BENCHMARK.md"
