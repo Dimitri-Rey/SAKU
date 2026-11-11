@@ -373,21 +373,24 @@
   <h2><span class="num">06</span>La suite : le codec neuronal</h2>
   <p>Les meilleurs compresseurs de texte sont des modèles de langage : un modèle qui prédit bien le caractère suivant permet de le coder en très peu de bits. Trois verrous expliquent pourquoi personne ne s'en sert pour archiver ses fichiers. Saku les attaque dans cet ordre, en commençant par un prédicteur simple et entièrement entier, le mélange de contextes des codecs 2 et 3, avant le réseau de neurones.</p>
   <div class="verrous">
-    <div><span class="etat">PREUVE EN COURS</span><b>Reproductibilité</b>Les codecs 2 et 3 calculent tout en entiers. Deux implémentations écrites séparément, en Python et en C, produisent les mêmes octets, quel que soit le niveau d'optimisation du compilateur. Reste à le prouver sur ARM64.</div>
+    <div><span class="etat">PROUVÉ POUR LES CODECS 2 ET 3</span><b>Reproductibilité</b>Tout est calculé en entiers. Python et C, écrits séparément, produisent les mêmes octets, quel que soit le compilateur, et un processeur ARM64 produit les mêmes archives qu'un x86, au bit près. Reste à faire de même avec le réseau de neurones.</div>
     <div><span class="etat">ENSUITE</span><b>Taille du modèle</b>Le modèle fait partie du décodeur et compte dans le ratio. Un modèle de 170 Mo ne se rembourse que sur de très grosses archives.</div>
     <div><span class="etat">ENSUITE</span><b>Vitesse</b>Ces compresseurs avancent en kilooctets par seconde sur un processeur. Un archiveur du quotidien ne peut pas être aussi lent.</div>
   </div>
   <p>Si le codec neuronal ne bat pas xz et zstd, modèle compris et à un débit supportable, Saku n'a pas de raison d'exister. Les conditions d'abandon sont écrites à l'avance : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/RISQUES.md">RISQUES.md</a>.</p>
+  <h3>Ce qu'on a mesuré et décidé</h3>
+  <p>Un grand modèle de langage (Qwen3.8-27B) code un extrait de code privé en <strong>0,41 bit par octet</strong>, contre 1,88 pour le codec 3 et 2,22 pour <span class="mono">xz -9</span> : le potentiel est là. Mais ce modèle pèse 15 Go et avance à quelques kilooctets par seconde. D'où les choix de Saku : <strong>un seul modèle, entraîné par le projet et livré avec l'outil</strong> (personne n'entraîne rien chez soi) ; une archive <strong>toujours relisible sur un processeur ordinaire</strong>, la carte graphique ne faisant qu'accélérer ; un petit réseau calculé en entiers, mélangé au codec 3 et sauté quand celui-ci est déjà sûr de lui. Détails, sources et pièges (un modèle a souvent appris par cœur le code public) : <a href="https://github.com/Dimitri-Rey/SAKU/blob/main/docs/RECHERCHE-MODELES.md">RECHERCHE-MODELES.md</a>.</p>
   <h3>Feuille de route</h3>
   <ul class="feuille">
     <li class="fait">Format v0, conteneur, chiffrement authentifié</li>
     <li class="fait">Lecteur durci, tests d'archives hostiles</li>
     <li class="fait">Banc de mesure vérifié contre zstd, xz, cmix et ts_zip</li>
     <li class="fait">Codec 2 : mélange de contextes en entiers, Python et C identiques octet pour octet</li>
-    <li>Reproductibilité prouvée sur ARM64</li>
+    <li class="fait">Reproductibilité sur ARM64 : mêmes archives qu'en x86, au bit près</li>
     <li class="fait">Codec 3 : seaux vérifiés, contexte « mot », raffinement des probabilités</li>
     <li class="fait">Blocs traités en parallèle, 1 Mo/s par cœur pour le codec 3</li>
     <li>Décompression du codec 3 plus rapide, aussi pour les petites archives</li>
+    <li class="fait">Recherche : plafond mesuré d'un grand modèle, état de l'art, choix d'architecture</li>
     <li>Réseau de neurones pré-entraîné, en arithmétique entière</li>
     <li>Conteneurs déjà compressés (.docx, .zip, JPEG) reconstruits à l'identique</li>
     <li>Correction d'erreurs, clé enveloppée, ajout de fichiers</li>

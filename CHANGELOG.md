@@ -13,6 +13,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions :
   vecteurs dans `tests/test_cm3.py`. ADR 0003. Le codec 2 reste lisible et s'écrit encore
   avec `--codec cm1`.
 - Option `--taille-bloc` (en Mio) de `saku creer`.
+- `docs/RECHERCHE-MODELES.md` : décisions sur le futur codec neuronal (un modèle unique livré,
+  lecture sur processeur garantie, niveaux de modèles), mesure du plafond de Qwen3.8-27B,
+  état de l'art (Qwen3.5, ts_zip, Nacrith, calcul entier, poids ternaires), test ARM64.
 - **Blocs traités en parallèle** à l'écriture et à la lecture (option `--fils`, paramètre
   `fils`) : l'archive produite ne dépend pas du nombre de fils. CPython au codec 3 : de
   0,8 à 7,4 Mo/s en compression, de 0,8 à 8,0 Mo/s en décompression.

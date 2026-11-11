@@ -18,8 +18,9 @@ environnements différents (x86-64 avec et sans AVX-512, ARM64), avec 1 fil et a
 
 **Où on en est (2026-11-11).** Les codecs 2 et 3 (mélange de contextes, sans réseau
 pré-entraîné) sont entièrement en entiers ; pour chacun, les implémentations Python et C
-produisent les mêmes octets, et la sortie C ne change pas entre `-O0`, `-O2` et `-O3`. Le test sur
-ARM64 reste à faire.
+produisent les mêmes octets, et la sortie C ne change pas entre `-O0`, `-O2` et `-O3`. Sur
+ARM64 (émulé), les archives x86 se relisent et les mêmes archives sont produites au bit près
+([RECHERCHE-MODELES.md](RECHERCHE-MODELES.md) §2.3). Le réseau de neurones reste à prouver.
 
 **Seuil d'abandon.** Si l'inférence en arithmétique entière coûte plus de la moitié du gain de
 compression obtenu en flottant, ou si elle est plus de dix fois plus lente, le codec 2 tel

@@ -194,7 +194,8 @@ Protocole, machine, second corpus, mémoire consommée, cmix et ts_zip :
 - [x] Banc de mesure vérifié contre zstd, xz, cmix et ts_zip
 - [x] Codec 2 : mélange de contextes en entiers, deux implémentations (Python, C) identiques octet pour octet
 - [x] Sortie identique quel que soit le niveau d'optimisation du compilateur
-- [ ] Reproductibilité prouvée sur une autre architecture (ARM64)
+- [x] Reproductibilité sur ARM64 : mêmes archives au bit près qu'en x86 (émulation QEMU)
+- [x] Recherche sur les modèles de langage pour la compression ([docs/RECHERCHE-MODELES.md](docs/RECHERCHE-MODELES.md))
 - [x] Codec 3 : seaux vérifiés, contexte « mot », raffinement des probabilités (APM)
 - [x] Blocs traités en parallèle ; 1 Mo/s par cœur pour le codec 3
 - [ ] Décompression du codec 3 plus rapide : vitesse d'un bloc, archives à peu de blocs
